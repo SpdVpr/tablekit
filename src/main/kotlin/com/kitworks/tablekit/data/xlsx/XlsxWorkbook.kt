@@ -334,16 +334,15 @@ class XlsxWorkbook private constructor(
         /**
          * Reads a format code well enough to tell a date from a time.
          *
-         * Excel writes both months and minutes as `m`; it means minutes when it
-         * sits next to hours or seconds. Text in quotes and locale hints in
-         * brackets are not format fields at all.
+         * Text in quotes and locale hints in brackets are not format fields at
+         * all, so they are skipped.
          */
         private fun temporalKindOf(formatCode: String): CellKind? {
             var quoted = false
             var bracketed = false
-            var hasDate = false
+            var hasDay = false
+            var hasMonth = false
             var hasTime = false
-            var previous = ' '
 
             for (character in formatCode) {
                 val lower = character.lowercaseChar()
@@ -352,12 +351,16 @@ class XlsxWorkbook private constructor(
                     character == '[' -> bracketed = true
                     character == ']' -> bracketed = false
                     quoted || bracketed -> Unit
-                    lower == 'y' || lower == 'd' -> hasDate = true
+                    lower == 'y' || lower == 'd' -> hasDay = true
                     lower == 'h' || lower == 's' -> hasTime = true
-                    lower == 'm' -> if (previous == 'h' || previous == ':') hasTime = true else hasDate = true
+                    lower == 'm' -> hasMonth = true
                 }
-                if (!quoted && !bracketed && !character.isWhitespace()) previous = character.lowercaseChar()
             }
+
+            // Excel writes months and minutes with the same letter. A code that
+            // has an m and a time field but no year or day - "mm:ss" - is
+            // minutes and seconds, not a month.
+            val hasDate = hasDay || (hasMonth && !hasTime)
 
             return when {
                 hasDate && hasTime -> CellKind.TIMESTAMP

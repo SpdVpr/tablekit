@@ -257,6 +257,37 @@ class ExcelImporterTest {
         }
     }
 
+    /** Excel writes months and minutes with the same letter. */
+    @Test
+    fun `a minutes and seconds format is a time, not a month`() {
+        val file = workbook { sheet ->
+            sheet.header("elapsed", "when")
+            val timeStyle = sheet.workbook.createCellStyle().apply {
+                dataFormat = sheet.workbook.creationHelper.createDataFormat().getFormat("mm:ss")
+            }
+            val monthStyle = sheet.workbook.createCellStyle().apply {
+                dataFormat = sheet.workbook.creationHelper.createDataFormat().getFormat("mmmm yyyy")
+            }
+            sheet.row(1) { row ->
+                row.createCell(0).apply {
+                    setCellValue(0.5)
+                    cellStyle = timeStyle
+                }
+                row.createCell(1).apply {
+                    setCellValue(LocalDate.of(2026, 8, 13).atStartOfDay())
+                    cellStyle = monthStyle
+                }
+            }
+        }
+
+        TableSource.open(file, TabularFormat.EXCEL).use { source ->
+            assertEquals(listOf("TIME", "DATE"), source.columns.map { it.typeName })
+            val row = source.fetchPage(Query(), 0, 1).rows.single()
+            assertEquals("12:00:00", row[0])
+            assertEquals("2026-08-13", row[1])
+        }
+    }
+
     // --- fixtures -----------------------------------------------------------
 
     private fun workbook(build: (Sheet) -> Unit): Path {

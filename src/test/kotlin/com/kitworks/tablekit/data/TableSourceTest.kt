@@ -155,13 +155,85 @@ class TableSourceTest {
 
     @Test
     fun `formats that are not implemented yet say so`() {
-        for (format in listOf(TabularFormat.EXCEL, TabularFormat.AVRO, TabularFormat.ORC)) {
+        for (format in listOf(TabularFormat.AVRO, TabularFormat.ORC)) {
             try {
                 TableSource.relationOf(temp.newFile("x.$format").toPath(), format)
                 fail("expected $format to be rejected")
             } catch (e: TableSourceException) {
                 assertTrue(e.message.orEmpty().contains(format.displayName))
             }
+        }
+    }
+
+    /** Values are rendered as text; the order they are sorted in must not be. */
+    @Test
+    fun `numbers sort as numbers`() {
+        val file = write("nums.parquet", "PARQUET", "SELECT * FROM (VALUES (9), (10), (100)) t(n)")
+
+        TableSource.open(file, TabularFormat.PARQUET).use { source ->
+            val ascending = source.fetchPage(Query().sortedBy("n", descending = false), 0, 10)
+            assertEquals(listOf("9", "10", "100"), ascending.rows.map { it[0] })
+        }
+    }
+
+    @Test
+    fun `timestamps are rendered without the driver's trailing zeros`() {
+        val file = write("times.parquet", "PARQUET", "SELECT TIMESTAMP '2026-08-13 14:30:00' AS at, DATE '2026-08-13' AS on_day")
+
+        TableSource.open(file, TabularFormat.PARQUET).use { source ->
+            val row = source.fetchPage(Query(), 0, 1).rows.single()
+            assertEquals("2026-08-13 14:30:00", row[0])
+            assertEquals("2026-08-13", row[1])
+        }
+    }
+
+    @Test
+    fun `filters are counted and applied by the engine`() {
+        val file = write("cities.parquet", "PARQUET", "SELECT * FROM (VALUES ('Prague', 1300000), ('Brno', 380000), ('Ostrava', NULL)) t(city, population)")
+
+        TableSource.open(file, TabularFormat.PARQUET).use { source ->
+            val contains = Query().filteredBy(ColumnFilter.Contains("city", "ra"))
+            assertEquals(2L, source.countRows(contains))
+            assertEquals(listOf("Prague", "Ostrava"), source.fetchPage(contains, 0, 10).rows.map { it[0] })
+
+            val nulls = Query().filteredBy(ColumnFilter.IsNull("population"))
+            assertEquals(listOf("Ostrava"), source.fetchPage(nulls, 0, 10).rows.map { it[0] })
+
+            val range = Query().filteredBy(ColumnFilter.Range("population", "300000", null))
+            assertEquals(listOf("Prague", "Brno"), source.fetchPage(range, 0, 10).rows.map { it[0] })
+
+            val anywhere = Query().filteredBy(ColumnFilter.AnyColumnContains("380", listOf("city", "population")))
+            assertEquals(listOf("Brno"), source.fetchPage(anywhere, 0, 10).rows.map { it[0] })
+
+            assertEquals("no filters means no counting query", source.rowCount, source.countRows(Query()))
+        }
+    }
+
+    /** A percent sign a user types is a percent sign, not a LIKE wildcard. */
+    @Test
+    fun `filter text is matched literally`() {
+        val file = write("codes.parquet", "PARQUET", "SELECT * FROM (VALUES ('100%'), ('100 percent'), ('a_b'), ('axb')) t(code)")
+
+        TableSource.open(file, TabularFormat.PARQUET).use { source ->
+            val percent = Query().filteredBy(ColumnFilter.Contains("code", "100%"))
+            assertEquals(listOf("100%"), source.fetchPage(percent, 0, 10).rows.map { it[0] })
+
+            val underscore = Query().filteredBy(ColumnFilter.Contains("code", "a_b"))
+            assertEquals(listOf("a_b"), source.fetchPage(underscore, 0, 10).rows.map { it[0] })
+        }
+    }
+
+    /** Filter values reach SQL as literals, so a quote must not end the statement. */
+    @Test
+    fun `a quote in a filter value cannot break the query`() {
+        val file = write("quotes.parquet", "PARQUET", "SELECT * FROM (VALUES ('it''s here'), ('nothing')) t(text)")
+
+        TableSource.open(file, TabularFormat.PARQUET).use { source ->
+            val filter = Query().filteredBy(ColumnFilter.Contains("text", "it's"))
+            assertEquals(listOf("it's here"), source.fetchPage(filter, 0, 10).rows.map { it[0] })
+
+            val hostile = Query().filteredBy(ColumnFilter.Equals("text", "'; DROP TABLE x; --"))
+            assertEquals(0, source.fetchPage(hostile, 0, 10).size)
         }
     }
 

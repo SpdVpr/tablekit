@@ -7,8 +7,9 @@ Vendor: **Kitworks** · Plugin ID: `com.kitworks.tablekit` (immutable after firs
 
 ## Status
 
-Phase 0 (skeleton). See [PLAN.md](PLAN.md) for the roadmap and [CLAUDE.md](CLAUDE.md) for the
-product decisions behind it.
+Phase 1: the viewer works for Parquet, CSV, TSV, JSON Lines and Excel, with sorting and
+filtering. See [PLAN.md](PLAN.md) for the roadmap, [CHANGELOG.md](CHANGELOG.md) for what
+landed, and [CLAUDE.md](CLAUDE.md) for the product decisions behind it.
 
 ## Requirements
 
@@ -30,6 +31,17 @@ The build never depends on IntelliJ Ultimate or on the Kotlin plugin.
 ./gradlew verifyPlugin    # IntelliJ Plugin Verifier against recommended IDEs
 ```
 
+Two suites are opt in because of what they produce:
+
+```bash
+./gradlew test -Ptablekit.perf=true --tests '*PerformanceTest'
+./gradlew test -Ptablekit.screenshots=true --tests '*GridScreenshotTest'
+```
+
+The first generates a 1.2 GB Parquet file under `testData/generated` (kept between runs)
+and asserts the performance targets. The second paints the editor into
+`build/screenshots` without starting an IDE.
+
 On Windows, `JAVA_HOME` must point at a JDK 21 installation
 (`C:\Program Files\Microsoft\jdk-21.0.12.8-hotspot` on the dev machine).
 
@@ -38,13 +50,26 @@ On Windows, `JAVA_HOME` must point at a JDK 21 installation
 ```
 FileEditorProvider (custom editor, NOT the IDE Document model - it caps at ~20 MB)
  ├─ BinaryTabularFileEditorProvider   parquet/xlsx/avro/orc -> HIDE_DEFAULT_EDITOR
- └─ TextTabularFileEditorProvider     csv/tsv/jsonl        -> PLACE_AFTER_DEFAULT_EDITOR
-        └─ TabularFileEditor -> TabularEditorPanel (grid, schema, status bar)
-                                   └─ DuckDB JDBC (embedded), paged LIMIT/OFFSET windows
+ └─ TextTabularFileEditorProvider     csv/tsv/jsonl         -> PLACE_AFTER_DEFAULT_EDITOR
+        └─ TabularFileEditor -> TabularEditorPanel (toolbar, grid, status bar)
+              └─ TabularTableModel   40 pages x 200 rows, LRU, async fetch
+                    └─ TableSource   one DuckDB session per open file
+                          ├─ parquet/csv/tsv/jsonl  read in place
+                          └─ xlsx     own reader -> temp table -> typed view
 ```
 
 Sorting, filtering and statistics are pushed down to DuckDB as SQL; the grid never holds
-more than a few thousand rows.
+more than a few thousand rows. One background thread per open file runs every query, and
+the EDT only paints what has already arrived.
+
+### Why the .xlsx reader is ours
+
+Every Excel library worth using depends on `commons-compress` and a StAX implementation,
+both of which the IntelliJ Platform already bundles in versions we do not control.
+Shipping a second copy is how plugins earn `NoSuchMethodError` reports on IDE versions
+their author never tested. `XlsxWorkbook` therefore parses the format with `java.util.zip`
+and the `javax.xml.stream` API only. Apache POI is used in tests to write the fixtures it
+is checked against, and is never shipped.
 
 ### Non-negotiable constraints
 
@@ -62,7 +87,9 @@ more than a few thousand rows.
 src/main/kotlin/com/kitworks/tablekit/
   format/     TabularFormat - supported formats and extension mapping
   filetype/   IDE file type registrations (drives plugin suggestions)
-  editor/     FileEditor, providers, root panel
+  data/       TableSource, queries, filters, DuckDB session
+  data/xlsx/  the .xlsx reader
+  editor/     FileEditor, providers, grid model, renderers, root panel
   icons/      icon holder
 src/main/resources/
   META-INF/plugin.xml   plugin descriptor (id, name, vendor, extensions)

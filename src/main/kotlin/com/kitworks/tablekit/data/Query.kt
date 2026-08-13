@@ -12,14 +12,43 @@ data class SortKey(val column: String, val descending: Boolean) {
  * Everything here becomes SQL, so the grid can stay ignorant of how many rows
  * the file actually has.
  */
-data class Query(val sort: List<SortKey> = emptyList()) {
+data class Query(
+    val sort: List<SortKey> = emptyList(),
+    val filters: List<ColumnFilter> = emptyList(),
+) {
 
     fun orderByClause(): String =
         if (sort.isEmpty()) "" else " ORDER BY " + sort.joinToString(", ") { it.toSql() }
 
-    fun sortedBy(column: String, descending: Boolean): Query = Query(listOf(SortKey(column, descending)))
+    fun whereClause(): String =
+        if (filters.isEmpty()) "" else " WHERE " + filters.joinToString(" AND ") { it.toSql() }
 
-    fun unsorted(): Query = Query()
+    // --- sorting ------------------------------------------------------------
+
+    fun sortedBy(column: String, descending: Boolean): Query = copy(sort = listOf(SortKey(column, descending)))
+
+    fun unsorted(): Query = copy(sort = emptyList())
 
     fun sortKeyFor(column: String): SortKey? = sort.firstOrNull { it.column == column }
+
+    // --- filtering ----------------------------------------------------------
+
+    /**
+     * One filter per target at a time; a new one replaces it. The free text
+     * filter names no column, so it replaces only itself.
+     */
+    fun filteredBy(filter: ColumnFilter): Query =
+        copy(filters = filters.filterNot { it.column == filter.column } + filter)
+
+    fun withoutFilterOn(column: String): Query = copy(filters = filters.filterNot { it.column == column })
+
+    fun withoutFreeText(): Query = copy(filters = filters.filterNot { it is ColumnFilter.AnyColumnContains })
+
+    fun unfiltered(): Query = copy(filters = emptyList())
+
+    fun filterOn(column: String): ColumnFilter? =
+        filters.firstOrNull { it.column == column && it !is ColumnFilter.AnyColumnContains }
+
+    val freeText: String?
+        get() = filters.filterIsInstance<ColumnFilter.AnyColumnContains>().firstOrNull()?.text
 }

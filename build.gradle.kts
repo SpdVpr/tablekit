@@ -37,6 +37,21 @@ dependencies {
     implementation("org.duckdb:duckdb_jdbc:1.5.5.1")
 
     testImplementation("junit:junit:4.13.2")
+
+    // Test only: writes the .xlsx fixtures our own reader is checked against.
+    // Never shipped - bundling POI (or fastexcel) would put a second copy of
+    // commons-compress and a StAX implementation next to the IDE's own.
+    testImplementation("org.apache.poi:poi-ooxml:5.5.1")
+}
+
+tasks.test {
+    // Performance tests generate a gigabyte of data, so they are opt in:
+    //   ./gradlew test -Ptablekit.perf=true --tests '*PerformanceTest'
+    providers.gradleProperty("tablekit.perf").orNull?.let { systemProperty("tablekit.perf", it) }
+    providers.gradleProperty("tablekit.screenshots").orNull?.let { systemProperty("tablekit.screenshots", it) }
+    testLogging {
+        showStandardStreams = true
+    }
 }
 
 intellijPlatform {

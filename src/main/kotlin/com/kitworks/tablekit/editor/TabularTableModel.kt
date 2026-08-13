@@ -2,6 +2,7 @@ package com.kitworks.tablekit.editor
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.kitworks.tablekit.data.ColumnFilter
 import com.kitworks.tablekit.data.ColumnInfo
 import com.kitworks.tablekit.data.DataPage
 import com.kitworks.tablekit.data.Query
@@ -18,18 +19,22 @@ import javax.swing.table.AbstractTableModel
  * EDT never waits for the disk.
  *
  * All state lives on the EDT. The background executor only runs queries and
- * hands the result back through [ApplicationManager.invokeLater], so there are
- * no locks to get wrong.
+ * hands the result back through invokeLater, so there are no locks to get wrong.
  */
 class TabularTableModel(
     private val source: TableSource,
     private val executor: ExecutorService,
     private val onError: (String) -> Unit,
+    private val onRowCountChanged: (Long) -> Unit = {},
 ) : AbstractTableModel() {
 
     val columns: List<ColumnInfo> = source.columns
 
     var query: Query = Query()
+        private set
+
+    /** Rows the current filters leave; the full count while nothing is filtered. */
+    var filteredRowCount: Long = source.rowCount
         private set
 
     /** Access-ordered so the eldest entry is the least recently used page. */
@@ -42,7 +47,7 @@ class TabularTableModel(
     private var generation = 0
 
     /** Swing addresses rows with an Int - not a limit any real file reaches today. */
-    override fun getRowCount(): Int = source.rowCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    override fun getRowCount(): Int = filteredRowCount.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
 
     override fun getColumnCount(): Int = columns.size
 
@@ -65,6 +70,9 @@ class TabularTableModel(
     /** True while the row's page is still being fetched, so the grid can say so. */
     fun isLoaded(rowIndex: Int): Boolean = pages.containsKey(pageIndexOf(rowIndex.toLong()))
 
+    // --- what the user asks for ---------------------------------------------
+
+    /** Cycles the column through ascending, descending and back to file order. */
     fun sortBy(columnIndex: Int) {
         val column = columns[columnIndex].name
         val current = query.sortKeyFor(column)
@@ -77,12 +85,57 @@ class TabularTableModel(
         )
     }
 
+    fun sortBy(columnIndex: Int, descending: Boolean) =
+        applyQuery(query.sortedBy(columns[columnIndex].name, descending))
+
+    fun clearSort() = applyQuery(query.unsorted())
+
+    fun filterBy(filter: ColumnFilter) = applyQuery(query.filteredBy(filter))
+
+    fun clearFilterOn(column: String) = applyQuery(query.withoutFilterOn(column))
+
+    /** Free text across every column, the filter people reach for first. */
+    fun filterByText(text: String) = applyQuery(
+        if (text.isBlank()) {
+            query.withoutFreeText()
+        } else {
+            query.filteredBy(ColumnFilter.AnyColumnContains(text, columns.map { it.name }))
+        },
+    )
+
+    fun clearFilters() = applyQuery(query.unfiltered())
+
+    // --- query plumbing -----------------------------------------------------
+
     private fun applyQuery(newQuery: Query) {
+        if (newQuery == query) return
+
+        val filtersChanged = newQuery.filters != query.filters
         query = newQuery
         generation++
         pages.clear()
         pending.clear()
-        fireTableDataChanged()
+
+        if (!filtersChanged) {
+            fireTableDataChanged()
+            return
+        }
+
+        // The row count is part of the answer now, and only the engine knows it.
+        val requested = generation
+        executor.execute {
+            val counted = runCatching { source.countRows(newQuery) }
+            invokeOnEdt {
+                if (requested != generation) return@invokeOnEdt
+                counted
+                    .onSuccess {
+                        filteredRowCount = it
+                        fireTableDataChanged()
+                        onRowCountChanged(it)
+                    }
+                    .onFailure { failure -> onError(messageOf(failure)) }
+            }
+        }
     }
 
     private fun pageIndexOf(row: Long): Long = row / PAGE_SIZE
@@ -108,10 +161,11 @@ class TabularTableModel(
             val first = (pageIndex * PAGE_SIZE).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             val last = (first.toLong() + page.size - 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             fireTableRowsUpdated(first, last)
-        }.onFailure { failure ->
-            onError((failure as? TableSourceException)?.message ?: "The file could not be read.")
-        }
+        }.onFailure { failure -> onError(messageOf(failure)) }
     }
+
+    private fun messageOf(failure: Throwable): String =
+        (failure as? TableSourceException)?.message ?: "The file could not be read."
 
     private fun invokeOnEdt(action: () -> Unit) =
         ApplicationManager.getApplication().invokeLater(action, ModalityState.any())

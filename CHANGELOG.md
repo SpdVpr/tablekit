@@ -66,25 +66,25 @@ A 1.24 GB Parquet file, 25 million rows:
 
 | | |
 |---|---|
-| Open (schema + row count) | 17 ms (< 2 s) |
-| First page, mid file, end of file | 14 / 23 / 27 ms |
-| First page of a full sort | 940 ms |
-| Heap after sorting | 37 MB (< 300 MB) |
+| Open (schema + row count) | 21 ms (< 2 s) |
+| First page, mid file, end of file | 24 / 35 / 39 ms |
+| First page of a full sort | 1.1 s |
+| Heap after sorting | 38 MB (< 300 MB) |
 
 A 786 MB CSV file, 12 million rows. The engine re-reads a CSV for every query,
 so a page deep in the file costs a scan rather than a seek:
 
 | | |
 |---|---|
-| Open (sniff + row count) | 814 ms |
+| Open (sniff + row count) | 889 ms |
 | First page | 35 ms |
-| Page at the end of the file | 1.7 s |
-| Counting a filtered result | 1.2 s |
+| Page at the end of the file | 1.8 s |
+| Counting a filtered result | 1.8 s |
 
 A 200 000 row Excel workbook, which is loaded rather than read in place:
 
 | | |
 |---|---|
-| Open (two passes + load) | 1.5 s |
-| Any page afterwards | 3 ms |
-| Sorted page | 13 ms |
+| Open (two passes + load) | 2.0 s |
+| Any page afterwards | 5 ms |
+| Sorted page | 20 ms |

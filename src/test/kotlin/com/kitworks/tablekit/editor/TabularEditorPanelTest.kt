@@ -111,6 +111,97 @@ class TabularEditorPanelTest : BasePlatformTestCase() {
         }
     }
 
+    fun `test a filter that matches nothing explains itself`() {
+        val file = parquet("empty.parquet", "SELECT * FROM (VALUES ('Prague'), ('Brno')) t(city)")
+
+        withEditorFor(file) { table ->
+            val model = table.model as TabularTableModel
+            awaitPage(model)
+
+            model.filterByText("nothing here matches")
+            PlatformTestUtil.waitWithEventsDispatching("the filter never applied", { model.rowCount == 0 }, TIMEOUT_SECONDS)
+
+            val emptyText = table.emptyText.text
+            assertTrue("an empty grid must say why: '$emptyText'", emptyText.contains("No rows match"))
+        }
+    }
+
+    /** The sheet dropdown reopens the file, which is more than setting a field. */
+    fun `test switching a workbook sheet shows the other sheet`() {
+        val path = tempDirectory().resolve("book.xlsx")
+        org.apache.poi.xssf.usermodel.XSSFWorkbook().use { book ->
+            listOf("First", "Second").forEachIndexed { index, name ->
+                val sheet = book.createSheet(name)
+                sheet.createRow(0).createCell(0).setCellValue("label")
+                sheet.createRow(1).createCell(0).setCellValue("from-$name-$index")
+            }
+            java.nio.file.Files.newOutputStream(path).use(book::write)
+        }
+        val file = refresh(path)
+
+        val editor = BinaryTabularFileEditorProvider().createEditor(project, file)
+        try {
+            var grid: JBTable? = null
+            PlatformTestUtil.waitWithEventsDispatching(
+                "the grid never appeared",
+                {
+                    grid = UIUtil.findComponentOfType(editor.component, JBTable::class.java)
+                    grid != null
+                },
+                TIMEOUT_SECONDS,
+            )
+            awaitPage(grid!!.model as TabularTableModel)
+            assertEquals("from-First-0", (grid!!.model as TabularTableModel).getValueAt(0, 0))
+
+            val combo = checkNotNull(
+                UIUtil.findComponentOfType(editor.component, com.intellij.openapi.ui.ComboBox::class.java),
+            ) { "a workbook with two sheets must offer a sheet selector" }
+            combo.selectedIndex = 1
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "the second sheet never loaded",
+                {
+                    val model = UIUtil.findComponentOfType(editor.component, JBTable::class.java)?.model
+                    (model as? TabularTableModel)?.let { it.getValueAt(0, 0) == "from-Second-1" } ?: false
+                },
+                TIMEOUT_SECONDS,
+            )
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
+    /** Holding a file open would stop people deleting or replacing it on Windows. */
+    fun `test closing the editor lets go of the file`() {
+        val path = tempDirectory().resolve("released.parquet")
+        DuckDb.connect().use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("COPY (SELECT i AS n FROM range(0, 1000) t(i)) TO ${Sql.literal(path.toString())} (FORMAT PARQUET)")
+            }
+        }
+        val file = refresh(path)
+
+        val editor = BinaryTabularFileEditorProvider().createEditor(project, file)
+        var grid: JBTable? = null
+        PlatformTestUtil.waitWithEventsDispatching(
+            "the grid never appeared",
+            {
+                grid = UIUtil.findComponentOfType(editor.component, JBTable::class.java)
+                grid != null
+            },
+            TIMEOUT_SECONDS,
+        )
+        awaitPage(grid!!.model as TabularTableModel)
+        Disposer.dispose(editor)
+
+        PlatformTestUtil.waitWithEventsDispatching(
+            "the file was still locked after the editor closed",
+            { runCatching { java.nio.file.Files.delete(path) }.isSuccess },
+            TIMEOUT_SECONDS,
+        )
+        assertFalse(java.nio.file.Files.exists(path))
+    }
+
     private fun numbersOf(table: JBTable): RowNumberTable {
         val scrollPane = checkNotNull(UIUtil.getParentOfType(javax.swing.JScrollPane::class.java, table)) { "grid is not in a scroll pane" }
         return checkNotNull(scrollPane.rowHeader?.view as? RowNumberTable) { "grid has no row numbers" }

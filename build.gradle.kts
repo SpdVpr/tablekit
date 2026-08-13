@@ -1,3 +1,4 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
@@ -78,6 +79,11 @@ intellijPlatform {
     pluginVerification {
         ides {
             recommended()
+            // recommended() covers what the Marketplace has compatibility data
+            // for, which trails the newest release. The plugin declares no
+            // untilBuild, so people will install it on the newest IDE - that is
+            // exactly the version worth checking.
+            create(IntelliJPlatformType.IntellijIdea, "2026.2")
         }
     }
 

@@ -350,6 +350,10 @@ class TabularEditorPanel(
         val opened = source ?: return
         val tableModel = model ?: return
 
+        // Deprecated from 2025.1 onwards, and the only constructor 2024.2 has.
+        // It stays until sinceBuild moves past 242. The plugin verifier reports
+        // it as an informational deprecation, not a compatibility problem.
+        @Suppress("DEPRECATION")
         val descriptor = FileSaverDescriptor(
             TableKitBundle.message("editor.export.title"),
             TableKitBundle.message("editor.export.description"),

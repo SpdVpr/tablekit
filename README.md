@@ -61,8 +61,12 @@ The build never depends on IntelliJ Ultimate or on the Kotlin plugin.
 ./gradlew buildPlugin     # distribution zip in build/distributions
 ./gradlew runIde          # sandbox IDE with the plugin installed
 ./gradlew test            # unit tests
-./gradlew verifyPlugin    # IntelliJ Plugin Verifier against recommended IDEs
+./gradlew verifyPlugin    # IntelliJ Plugin Verifier, oldest supported IDE to newest
 ```
+
+`verifyPlugin` last reported **compatible** against IntelliJ IDEA 2024.2, 2024.3, 2025.1,
+2025.2 and 2026.2, with one deprecation: `FileSaverDescriptor`'s only 2024.2 constructor
+was deprecated in 2025.1, so it stays until `sinceBuild` moves past 242.
 
 Two suites are opt in because of what they produce:
 

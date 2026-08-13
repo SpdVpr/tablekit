@@ -53,6 +53,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Column statistics show the distribution of ordered columns as a histogram and the
   leading values of categorical ones.
 
+### Verified
+IntelliJ Plugin Verifier reports the plugin **compatible** with IntelliJ IDEA 2024.2,
+2024.3, 2025.1, 2025.2 and 2026.2 - the whole range it declares - and eligible to be
+enabled and disabled without restarting the IDE.
+
 ### Performance
 Targets from PLAN.md in brackets.
 

@@ -71,6 +71,24 @@ class TabularTableModel(
     /** True while the row's page is still being fetched, so the grid can say so. */
     fun isLoaded(rowIndex: Int): Boolean = pages.containsKey(pageIndexOf(rowIndex.toLong()))
 
+    /**
+     * Where the current filter matches inside a cell, so the grid can say why
+     * the row survived it. A filter that only removes rows leaves people
+     * guessing which column it caught.
+     */
+    fun matchIn(text: String, columnIndex: Int): IntRange? {
+        val needles = listOfNotNull(
+            query.freeText,
+            (query.filterOn(columns[columnIndex].name) as? ColumnFilter.Contains)?.text,
+        )
+        for (needle in needles) {
+            if (needle.isEmpty()) continue
+            val start = text.indexOf(needle, ignoreCase = true)
+            if (start >= 0) return start until (start + needle.length)
+        }
+        return null
+    }
+
     // --- what the user asks for ---------------------------------------------
 
     /** Cycles the column through ascending, descending and back to file order. */

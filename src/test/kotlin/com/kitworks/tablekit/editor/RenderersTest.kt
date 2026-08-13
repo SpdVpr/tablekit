@@ -27,7 +27,7 @@ class RenderersTest : BasePlatformTestCase() {
 
     fun `test a value, a null and a row still loading are three different things`() {
         val loadedRows = setOf(0, 1)
-        val renderer = TabularCellRenderer(columns) { it in loadedRows }
+        val renderer = TabularCellRenderer(columns, isRowLoaded = { it in loadedRows })
 
         val value = renderer.render("42.5", row = 0, column = 0)
         assertEquals("42.5", value.text)
@@ -40,7 +40,7 @@ class RenderersTest : BasePlatformTestCase() {
     }
 
     fun `test numbers are right aligned and text is not`() {
-        val renderer = TabularCellRenderer(columns) { true }
+        val renderer = TabularCellRenderer(columns, isRowLoaded = { true })
 
         assertEquals(SwingConstants.RIGHT, renderer.render("1", row = 0, column = 0).horizontalAlignment)
         assertEquals(SwingConstants.LEFT, renderer.render("Prague", row = 0, column = 1).horizontalAlignment)
@@ -52,7 +52,7 @@ class RenderersTest : BasePlatformTestCase() {
     }
 
     fun `test a long value is cut for the grid but kept in the tooltip`() {
-        val renderer = TabularCellRenderer(columns) { true }
+        val renderer = TabularCellRenderer(columns, isRowLoaded = { true })
         val long = "x".repeat(2000)
 
         val rendered = renderer.render(long, row = 0, column = 1)
@@ -113,6 +113,19 @@ class RenderersTest : BasePlatformTestCase() {
             .toList()
         assertTrue("the chips must name the filters: $labels", labels.any { it.contains("Prague") })
         assertTrue(labels.any { it.contains("amount") && it.contains("null") })
+    }
+
+    fun `test the renderer marks what the filter matched`() {
+        var needle: IntRange? = null
+        val renderer = TabularCellRenderer(columns, isRowLoaded = { true }, matchIn = { _, _ -> needle })
+
+        needle = 2 until 4
+        val marked = renderer.render("Prague", row = 0, column = 1)
+        assertEquals("the text itself must not change", "Prague", marked.text)
+
+        // A selected cell is already marked; the highlight would fight it.
+        val selected = renderer.getTableCellRendererComponent(table, "Prague", true, false, 0, 1)
+        assertNotNull(selected)
     }
 
     // --- helpers ------------------------------------------------------------

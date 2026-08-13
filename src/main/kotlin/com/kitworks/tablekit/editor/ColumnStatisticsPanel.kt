@@ -24,10 +24,12 @@ import javax.swing.SwingConstants
 
 /**
  * What a column contains, shown in a popup: how much of it is missing, how many
- * distinct values there are, its range, and which values dominate.
+ * distinct values there are, its range, and how it spreads out.
  *
- * The frequency bars are the point - a column that is 90% one value is
- * something you should be able to see, not count.
+ * The bars are the point - a column that is 90% one value, or a price column
+ * with a long tail, is something you should see rather than count. They are
+ * also the one place in the plugin where colour carries meaning rather than
+ * decoration, so they take the theme's accent.
  */
 class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
     JBPanel<ColumnStatisticsPanel>(BorderLayout()) {
@@ -188,7 +190,7 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
             val highest = histogram.highest.coerceAtLeast(1)
             val baseline = height - JBUI.scale(1)
 
-            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.45)
+            g.color = ColorUtil.withAlpha(JBUI.CurrentTheme.Focus.focusColor(), 0.75)
             bins.forEachIndexed { index, count ->
                 val barHeight = (count.toDouble() / highest * (baseline - JBUI.scale(2))).toInt()
                 val x = (index * (barWidth + gap)).toInt()
@@ -213,9 +215,9 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
         override fun paintComponent(g: Graphics) {
             val filled = (width * fraction.coerceIn(0.0, 1.0)).toInt().coerceAtLeast(JBUI.scale(2))
             val top = (height - JBUI.scale(8)) / 2
-            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.12)
+            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.10)
             g.fillRect(0, top, width, JBUI.scale(8))
-            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.45)
+            g.color = ColorUtil.withAlpha(JBUI.CurrentTheme.Focus.focusColor(), 0.75)
             g.fillRect(0, top, filled, JBUI.scale(8))
         }
     }

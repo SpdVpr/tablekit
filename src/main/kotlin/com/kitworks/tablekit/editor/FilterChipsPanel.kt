@@ -72,7 +72,9 @@ class FilterChipsPanel(
             val graphics = g.create() as Graphics2D
             try {
                 graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                graphics.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.10)
+                // Tinted with the theme accent so a chip reads as something
+                // switched on rather than as decoration.
+                graphics.color = ColorUtil.withAlpha(JBUI.CurrentTheme.Focus.focusColor(), 0.18)
                 val arc = JBUI.scale(ARC)
                 graphics.fillRoundRect(0, 0, width, height, arc, arc)
             } finally {

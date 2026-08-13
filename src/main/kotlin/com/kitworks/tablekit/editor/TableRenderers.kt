@@ -6,6 +6,7 @@ import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.kitworks.tablekit.data.ColumnInfo
 import java.awt.Component
+import java.awt.Graphics
 import javax.swing.JLabel
 import javax.swing.JTable
 import javax.swing.SwingConstants
@@ -18,11 +19,18 @@ import javax.swing.table.TableCellRenderer
  * Three states must stay distinguishable: a real value, a SQL NULL, and a row
  * whose page has not arrived yet. Conflating the last two is how data viewers
  * end up lying to people.
+ *
+ * The only colour in the grid marks what the filter matched. A table where the
+ * values themselves are coloured spends its attention budget on decoration and
+ * has nothing left for the one thing worth pointing at.
  */
 class TabularCellRenderer(
     private val columns: List<ColumnInfo>,
     private val isRowLoaded: (Int) -> Boolean,
+    private val matchIn: (String, Int) -> IntRange? = { _, _ -> null },
 ) : DefaultTableCellRenderer() {
+
+    private var match: IntRange? = null
 
     override fun getTableCellRendererComponent(
         table: JTable,
@@ -39,12 +47,16 @@ class TabularCellRenderer(
         // Without breathing room a right aligned number touches the text of the
         // column next to it and the two read as one value.
         border = JBUI.Borders.empty(0, 6)
+        match = null
 
         val text = value as String?
         when {
             text != null -> {
-                this.text = if (text.length > MAX_CELL_LENGTH) text.take(MAX_CELL_LENGTH) + "..." else text
+                val shown = if (text.length > MAX_CELL_LENGTH) text.take(MAX_CELL_LENGTH) + "..." else text
+                this.text = shown
                 toolTipText = if (text.length > MAX_CELL_LENGTH) text.take(MAX_TOOLTIP_LENGTH) else null
+                // A selected cell is already marked; two marks fight each other.
+                if (!isSelected) match = matchIn(shown, modelColumn)
             }
 
             isRowLoaded(row) -> {
@@ -62,6 +74,25 @@ class TabularCellRenderer(
             }
         }
         return this
+    }
+
+    /** Paints the filter match behind the text, in the colour the IDE uses for search hits. */
+    override fun paintComponent(g: Graphics) {
+        match?.let { range ->
+            val metrics = getFontMetrics(font)
+            val shown = text.orEmpty()
+            if (range.last < shown.length) {
+                val textStart = when (horizontalAlignment) {
+                    SwingConstants.RIGHT -> width - insets.right - metrics.stringWidth(shown)
+                    else -> insets.left
+                }
+                val from = textStart + metrics.stringWidth(shown.substring(0, range.first))
+                val width = metrics.stringWidth(shown.substring(range.first, range.last + 1))
+                g.color = UIUtil.getSearchMatchGradientStartColor()
+                g.fillRect(from, 0, width, height)
+            }
+        }
+        super.paintComponent(g)
     }
 
     private companion object {

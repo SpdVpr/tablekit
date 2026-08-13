@@ -144,7 +144,10 @@ class TabularEditorPanel(
             selectionModel.selectionMode = ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
             setStriped(true)
             setExpandableItemsEnabled(true)
-            setDefaultRenderer(String::class.java, TabularCellRenderer(tableModel.columns, tableModel::isLoaded))
+            setDefaultRenderer(
+                String::class.java,
+                TabularCellRenderer(tableModel.columns, tableModel::isLoaded, tableModel::matchIn),
+            )
             tableHeader.reorderingAllowed = false
             tableHeader.defaultRenderer = TabularHeaderRenderer(
                 tableHeader.defaultRenderer,

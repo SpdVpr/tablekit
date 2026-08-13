@@ -84,6 +84,25 @@ intellijPlatform {
             // No untilBuild: the plugin must not expire with every IDE release.
             untilBuild = provider { null }
         }
+
+        // Becomes "What's New" on the Marketplace listing. Without it the section
+        // is simply blank, which is how 0.1.0 shipped - the listing gives no
+        // reason to update, and the omission is invisible until you look at the
+        // published page. UPDATE THIS WITH EVERY RELEASE, alongside CHANGELOG.md.
+        changeNotes = provider {
+            """
+            <h4>0.1.0</h4>
+            <ul>
+                <li>First release: Parquet, Avro, Excel, CSV, TSV and JSON Lines open in a
+                    virtualized grid with no row limit.</li>
+                <li>Sorting, filtering and column statistics are pushed down to the embedded
+                    engine rather than done on the IDE's heap.</li>
+                <li>Export the rows currently shown to CSV, TSV, JSON Lines or Parquet.</li>
+                <li>No network permissions: nothing uploaded, no telemetry, nothing downloaded
+                    at runtime.</li>
+            </ul>
+            """.trimIndent()
+        }
     }
 
     pluginVerification {

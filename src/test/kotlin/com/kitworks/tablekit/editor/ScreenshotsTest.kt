@@ -87,6 +87,10 @@ class ScreenshotsTest : BasePlatformTestCase() {
             PlatformTestUtil.waitWithEventsDispatching("the filtered page never arrived", { model.isLoaded(0) }, 30)
 
             write(editor.component, "05-filtered.png")
+            // The filtered state is the one picture that cannot be automated in a
+            // real IDE - typing is not available there - so it is also rendered
+            // dark, to serve as the reference for taking it by hand.
+            inDarkTheme(editor.component) { write(editor.component, "05-filtered-dark.png") }
         }
     }
 

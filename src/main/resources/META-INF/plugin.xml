@@ -57,4 +57,16 @@
         <fileEditorProvider implementation="com.kitworks.tablekit.editor.BinaryTabularFileEditorProvider"/>
         <fileEditorProvider implementation="com.kitworks.tablekit.editor.TextTabularFileEditorProvider"/>
     </extensions>
+
+    <actions>
+        <!-- CSV and friends keep their own editor, so the grid sits on a second
+             tab. Without this action nobody would know it is there. -->
+        <action id="TableKit.OpenIn"
+                class="com.kitworks.tablekit.actions.OpenInTableKitAction"
+                text="Open in TableKit"
+                description="Open this file as a table in TableKit">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="EditorTabPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

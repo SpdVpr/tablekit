@@ -1,10 +1,18 @@
 package com.kitworks.tablekit.editor
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonShortcuts
+import com.intellij.openapi.actionSystem.CustomShortcutSet
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.fileChooser.FileChooserFactory
 import com.intellij.openapi.fileChooser.FileSaverDescriptor
+import com.intellij.openapi.project.DumbAwareAction
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.JBPopupMenu
 import com.intellij.openapi.ui.Messages
@@ -13,12 +21,13 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.JBColor
+import com.intellij.ui.SearchTextField
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBPanelWithEmptyText
 import com.intellij.ui.components.JBScrollPane
-import com.intellij.ui.components.JBTextField
 import com.intellij.ui.table.JBTable
 import com.intellij.util.Alarm
 import com.intellij.util.concurrency.AppExecutorUtil
@@ -36,14 +45,16 @@ import java.awt.Cursor
 import java.awt.FlowLayout
 import java.awt.Point
 import java.awt.Rectangle
+import java.awt.event.KeyAdapter
+import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.nio.file.Path
 import java.text.NumberFormat
-import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JMenuItem
 import javax.swing.JTable
+import javax.swing.KeyStroke
 import javax.swing.ListSelectionModel
 import javax.swing.event.DocumentEvent
 
@@ -63,8 +74,10 @@ class TabularEditorPanel(
 
     private val executor = AppExecutorUtil.createBoundedApplicationPoolExecutor("TableKit: " + file.name, 1)
     private val statusLabel = JBLabel(format.displayName)
-    private val filterField = JBTextField()
-    private val toolbar = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), JBUI.scale(4)))
+    private val filterField = SearchTextField(false)
+    private val chips = FilterChipsPanel(::removeFilter, ::clearFilters)
+    private val toolbarRow = JBPanel<JBPanel<*>>(BorderLayout())
+    private val toolbarLeft = JBPanel<JBPanel<*>>(FlowLayout(FlowLayout.LEFT, JBUI.scale(6), JBUI.scale(3)))
 
     /** Debounces typing so a filter is one query, not one query per keystroke. */
     private val filterAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
@@ -74,6 +87,7 @@ class TabularEditorPanel(
     private var model: TabularTableModel? = null
     private var table: JBTable? = null
     private var rowNumbers: RowNumberTable? = null
+    private var actionToolbar: com.intellij.openapi.actionSystem.ActionToolbar? = null
     private var sheetIndex = 0
     private var columnsSized = false
 
@@ -82,11 +96,8 @@ class TabularEditorPanel(
 
     init {
         add(createStatusBar(), BorderLayout.SOUTH)
-        filterField.document.addDocumentListener(object : DocumentAdapter() {
-            override fun textChanged(event: DocumentEvent) {
-                model?.let(::scheduleFilter)
-            }
-        })
+        add(createNorth(), BorderLayout.NORTH)
+        installShortcuts()
         open()
     }
 
@@ -96,7 +107,8 @@ class TabularEditorPanel(
 
     private fun open() {
         columnsSized = false
-        toolbar.isVisible = false
+        toolbarRow.isVisible = false
+        chips.isVisible = false
         setCenter(JBPanelWithEmptyText().withEmptyText(TableKitBundle.message("editor.loading", file.name)))
 
         val requestedSheet = sheetIndex
@@ -116,11 +128,19 @@ class TabularEditorPanel(
         source?.let { previous -> executor.execute { previous.close() } }
         source = opened
 
-        val tableModel = TabularTableModel(opened, executor, ::showPageError) { updateStatus() }
+        val tableModel = TabularTableModel(
+            source = opened,
+            executor = executor,
+            onError = ::showPageError,
+            onRowCountChanged = { updateStatus() },
+            onQueryChanged = { refreshQueryUi() },
+        )
         val grid = JBTable(tableModel).apply {
             autoResizeMode = JTable.AUTO_RESIZE_OFF
             cellSelectionEnabled = true
             selectionModel.selectionMode = ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
+            setStriped(true)
+            setExpandableItemsEnabled(true)
             setDefaultRenderer(String::class.java, TabularCellRenderer(tableModel.columns, tableModel::isLoaded))
             tableHeader.reorderingAllowed = false
             tableHeader.defaultRenderer = TabularHeaderRenderer(
@@ -128,6 +148,7 @@ class TabularEditorPanel(
                 tableModel.columns,
             ) { column -> tableModel.query.sortKeyFor(column)?.descending }
             tableHeader.addMouseListener(headerMouse(this, tableModel))
+            addMouseListener(cellMouse(this))
         }
 
         val numbers = RowNumberTable(grid).apply { updateWidth() }
@@ -142,8 +163,11 @@ class TabularEditorPanel(
         model = tableModel
         table = grid
         rowNumbers = numbers
-        buildToolbar(opened, tableModel)
-        updateStatus()
+        buildToolbar(opened)
+        // The actions are disabled until a file is open; tell the toolbar that
+        // one now is, instead of waiting for whatever would refresh it next.
+        actionToolbar?.updateActionsAsync()
+        refreshQueryUi()
         setCenter(JBScrollPane(grid).apply { setRowHeaderView(numbers) })
     }
 
@@ -154,7 +178,14 @@ class TabularEditorPanel(
         setCenter(
             JBPanelWithEmptyText()
                 .withEmptyText(TableKitBundle.message("editor.error.title", file.name))
-                .apply { emptyText.appendLine(message) },
+                .apply {
+                    emptyText.appendLine(message)
+                    emptyText.appendLine("")
+                    emptyText.appendLine(
+                        TableKitBundle.message("editor.error.retry"),
+                        SimpleTextAttributes.LINK_ATTRIBUTES,
+                    ) { open() }
+                },
         )
         statusLabel.foreground = JBColor.RED
         statusLabel.text = message
@@ -169,14 +200,73 @@ class TabularEditorPanel(
         statusLabel.text = message
     }
 
-    // --- toolbar ------------------------------------------------------------
+    // --- chrome -------------------------------------------------------------
 
-    private fun buildToolbar(opened: TableSource, tableModel: TabularTableModel) {
-        toolbar.removeAll()
+    private fun createNorth(): JComponent {
+        filterField.textEditor.emptyText.text = TableKitBundle.message("editor.filter.hint")
+        filterField.textEditor.columns = FILTER_COLUMNS
+        filterField.addDocumentListener(object : DocumentAdapter() {
+            override fun textChanged(event: DocumentEvent) {
+                model?.let(::scheduleFilter)
+            }
+        })
+        filterField.addKeyboardListener(object : KeyAdapter() {
+            override fun keyPressed(event: KeyEvent) {
+                if (event.keyCode != KeyEvent.VK_ESCAPE) return
+                filterField.text = ""
+                table?.requestFocusInWindow()
+            }
+        })
+
+        val toolbar = ActionManager.getInstance().createActionToolbar(TOOLBAR_PLACE, actions(), true)
+        toolbar.targetComponent = this
+        actionToolbar = toolbar
+
+        toolbarRow.add(toolbarLeft, BorderLayout.WEST)
+        toolbarRow.add(toolbar.component, BorderLayout.EAST)
+        toolbarRow.isVisible = false
+
+        return JBPanel<JBPanel<*>>(BorderLayout()).apply {
+            add(toolbarRow, BorderLayout.NORTH)
+            add(chips, BorderLayout.SOUTH)
+        }
+    }
+
+    private fun actions() = DefaultActionGroup(
+        action(
+            TableKitBundle.message("action.statistics"),
+            TableKitBundle.message("action.statistics.description"),
+            AllIcons.General.InspectionsEye,
+        ) { showStatisticsForSelection() },
+        action(
+            TableKitBundle.message("action.export"),
+            TableKitBundle.message("action.export.description"),
+            AllIcons.ToolbarDecorator.Export,
+        ) { exportRows() },
+        action(
+            TableKitBundle.message("action.reload"),
+            TableKitBundle.message("action.reload.description"),
+            AllIcons.Actions.Refresh,
+        ) { open() },
+    )
+
+    private fun action(text: String, description: String, icon: javax.swing.Icon, run: () -> Unit) =
+        object : DumbAwareAction(text, description, icon) {
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
+
+            override fun update(event: AnActionEvent) {
+                event.presentation.isEnabled = model != null
+            }
+
+            override fun actionPerformed(event: AnActionEvent) = run()
+        }
+
+    private fun buildToolbar(opened: TableSource) {
+        toolbarLeft.removeAll()
 
         if (opened.sheets.size > 1) {
-            toolbar.add(JBLabel(TableKitBundle.message("editor.sheet")))
-            toolbar.add(
+            toolbarLeft.add(JBLabel(TableKitBundle.message("editor.sheet")))
+            toolbarLeft.add(
                 ComboBox(opened.sheets.toTypedArray()).apply {
                     selectedIndex = opened.sheetIndex
                     addActionListener {
@@ -189,18 +279,27 @@ class TabularEditorPanel(
             )
         }
 
-        filterField.apply {
-            emptyText.text = TableKitBundle.message("editor.filter.hint")
-            columns = 24
-            text = ""
-        }
-        toolbar.add(filterField)
-        toolbar.add(JButton(TableKitBundle.message("editor.export")).apply { addActionListener { exportRows() } })
-        toolbar.isVisible = true
-        toolbar.revalidate()
-        toolbar.repaint()
+        filterField.text = ""
+        toolbarLeft.add(filterField)
+        toolbarRow.isVisible = true
+        toolbarRow.revalidate()
+        toolbarRow.repaint()
+    }
 
-        if (toolbar.parent == null) add(toolbar, BorderLayout.NORTH)
+    private fun installShortcuts() {
+        val find = ActionManager.getInstance().getAction(IdeActions_FIND)?.shortcutSet
+        if (find != null) {
+            DumbAwareAction.create {
+                filterField.textEditor.requestFocusInWindow()
+                filterField.textEditor.selectAll()
+            }.registerCustomShortcutSet(find, this, this)
+        }
+
+        DumbAwareAction.create { open() }
+            .registerCustomShortcutSet(CustomShortcutSet(KeyStroke.getKeyStroke(KeyEvent.VK_F5, 0)), this, this)
+
+        DumbAwareAction.create { showSelectedValue() }
+            .registerCustomShortcutSet(CommonShortcuts.getCtrlEnter(), this, this)
     }
 
     private fun scheduleFilter(tableModel: TabularTableModel) {
@@ -208,7 +307,39 @@ class TabularEditorPanel(
         filterAlarm.addRequest({ tableModel.filterByText(filterField.text) }, FILTER_DELAY_MS)
     }
 
-    // --- exporting ----------------------------------------------------------
+    // --- what the user does -------------------------------------------------
+
+    private fun removeFilter(filter: ColumnFilter) {
+        if (filter is ColumnFilter.AnyColumnContains) filterField.text = ""
+        model?.clearFilterOn(filter.column)
+    }
+
+    private fun clearFilters() {
+        filterField.text = ""
+        model?.clearFilters()
+    }
+
+    /** Shows the selected cell in full - the truncated ones are the interesting ones. */
+    private fun showSelectedValue() {
+        val grid = table ?: return
+        val tableModel = model ?: return
+        val row = grid.selectedRow
+        val column = grid.selectedColumn
+        if (row < 0 || column < 0) return
+
+        val modelColumn = grid.convertColumnIndexToModel(column)
+        val cell = grid.getCellRect(row, column, true)
+        CellValueViewer
+            .popup(tableModel.columns[modelColumn], tableModel.getValueAt(row, modelColumn))
+            .show(RelativePoint(grid, Point(cell.x, cell.y + cell.height)))
+    }
+
+    private fun showStatisticsForSelection() {
+        val grid = table ?: return
+        val tableModel = model ?: return
+        val column = grid.selectedColumn.takeIf { it >= 0 }?.let(grid::convertColumnIndexToModel) ?: 0
+        showStatistics(tableModel, tableModel.columns[column], RelativePoint.getSouthWestOf(toolbarRow))
+    }
 
     /**
      * Writes what the user is looking at - filters and sort included, every row
@@ -276,6 +407,46 @@ class TabularEditorPanel(
 
     // --- grid behaviour -----------------------------------------------------
 
+    private fun cellMouse(grid: JBTable) = object : MouseAdapter() {
+        override fun mouseClicked(event: MouseEvent) {
+            if (event.isPopupTrigger) return
+            if (event.clickCount == 2 && event.button == MouseEvent.BUTTON1) showSelectedValue()
+        }
+
+        override fun mousePressed(event: MouseEvent) = maybeShowMenu(event)
+
+        override fun mouseReleased(event: MouseEvent) = maybeShowMenu(event)
+
+        private fun maybeShowMenu(event: MouseEvent) {
+            if (!event.isPopupTrigger) return
+            val row = grid.rowAtPoint(event.point)
+            val column = grid.columnAtPoint(event.point)
+            if (row < 0 || column < 0) return
+            // Right clicking outside the selection moves it, as everywhere else.
+            if (!grid.isCellSelected(row, column)) grid.changeSelection(row, column, false, false)
+            cellMenu(grid).show(grid, event.x, event.y)
+        }
+    }
+
+    /**
+     * The same actions as the toolbar, where the pointer already is. A viewer
+     * whose only affordances live in a toolbar makes people hunt.
+     */
+    private fun cellMenu(grid: JBTable): JBPopupMenu {
+        val menu = JBPopupMenu()
+        menu.add(menuItem(TableKitBundle.message("action.value")) { showSelectedValue() })
+        menu.add(menuItem(TableKitBundle.message("action.copy")) { copySelection(grid) })
+        menu.addSeparator()
+        menu.add(menuItem(TableKitBundle.message("stats.action")) { showStatisticsForSelection() })
+        menu.add(menuItem(TableKitBundle.message("action.export")) { exportRows() })
+        return menu
+    }
+
+    /** Swing already copies a selection as tab separated text; use its action. */
+    private fun copySelection(grid: JBTable) =
+        javax.swing.TransferHandler.getCopyAction()
+            .actionPerformed(java.awt.event.ActionEvent(grid, java.awt.event.ActionEvent.ACTION_PERFORMED, "copy"))
+
     private fun headerMouse(grid: JBTable, tableModel: TabularTableModel) = object : MouseAdapter() {
         override fun mousePressed(event: MouseEvent) = maybeShowMenu(event)
 
@@ -288,41 +459,30 @@ class TabularEditorPanel(
 
             val column = columnAt(grid, event) ?: return
             tableModel.sortBy(column)
-            afterQueryChange(grid)
         }
 
         private fun maybeShowMenu(event: MouseEvent) {
             if (!event.isPopupTrigger) return
             val column = columnAt(grid, event) ?: return
             val where = RelativePoint(grid.tableHeader, Point(event.x, event.y))
-            columnMenu(grid, tableModel, column, where).show(grid.tableHeader, event.x, event.y)
+            columnMenu(tableModel, column, where).show(grid.tableHeader, event.x, event.y)
         }
     }
 
     private fun columnAt(grid: JBTable, event: MouseEvent): Int? =
         grid.columnAtPoint(event.point).takeIf { it >= 0 }?.let(grid::convertColumnIndexToModel)
 
-    private fun columnMenu(grid: JBTable, tableModel: TabularTableModel, column: Int, where: RelativePoint): JBPopupMenu {
+    private fun columnMenu(tableModel: TabularTableModel, column: Int, where: RelativePoint): JBPopupMenu {
         val info: ColumnInfo = tableModel.columns[column]
         val menu = JBPopupMenu(info.name)
 
         menu.add(menuItem(TableKitBundle.message("stats.action")) { showStatistics(tableModel, info, where) })
         menu.addSeparator()
 
-        menu.add(
-            menuItem(TableKitBundle.message("filter.sort.asc")) {
-                tableModel.sortBy(column, descending = false)
-                afterQueryChange(grid)
-            },
-        )
-        menu.add(
-            menuItem(TableKitBundle.message("filter.sort.desc")) {
-                tableModel.sortBy(column, descending = true)
-                afterQueryChange(grid)
-            },
-        )
+        menu.add(menuItem(TableKitBundle.message("filter.sort.asc")) { tableModel.sortBy(column, descending = false) })
+        menu.add(menuItem(TableKitBundle.message("filter.sort.desc")) { tableModel.sortBy(column, descending = true) })
         if (tableModel.query.sortKeyFor(info.name) != null) {
-            menu.add(menuItem(TableKitBundle.message("filter.sort.clear")) { tableModel.clearSort(); afterQueryChange(grid) })
+            menu.add(menuItem(TableKitBundle.message("filter.sort.clear")) { tableModel.clearSort() })
         }
         menu.addSeparator()
 
@@ -330,7 +490,6 @@ class TabularEditorPanel(
             menuItem(TableKitBundle.message("filter.contains")) {
                 ask(TableKitBundle.message("filter.contains.prompt", info.name))?.let {
                     tableModel.filterBy(ColumnFilter.Contains(info.name, it))
-                    afterQueryChange(grid)
                 }
             },
         )
@@ -338,24 +497,17 @@ class TabularEditorPanel(
             menuItem(TableKitBundle.message("filter.equals")) {
                 ask(TableKitBundle.message("filter.equals.prompt", info.name))?.let {
                     tableModel.filterBy(ColumnFilter.Equals(info.name, it))
-                    afterQueryChange(grid)
                 }
             },
         )
-        menu.add(menuItem(TableKitBundle.message("filter.nulls")) { tableModel.filterBy(ColumnFilter.IsNull(info.name)); afterQueryChange(grid) })
-        menu.add(menuItem(TableKitBundle.message("filter.notNulls")) { tableModel.filterBy(ColumnFilter.IsNotNull(info.name)); afterQueryChange(grid) })
+        menu.add(menuItem(TableKitBundle.message("filter.nulls")) { tableModel.filterBy(ColumnFilter.IsNull(info.name)) })
+        menu.add(menuItem(TableKitBundle.message("filter.notNulls")) { tableModel.filterBy(ColumnFilter.IsNotNull(info.name)) })
 
         if (tableModel.query.filterOn(info.name) != null) {
-            menu.add(menuItem(TableKitBundle.message("filter.clear.column")) { tableModel.clearFilterOn(info.name); afterQueryChange(grid) })
+            menu.add(menuItem(TableKitBundle.message("filter.clear.column")) { tableModel.clearFilterOn(info.name) })
         }
         if (tableModel.query.filters.isNotEmpty()) {
-            menu.add(
-                menuItem(TableKitBundle.message("filter.clear.all")) {
-                    filterField.text = ""
-                    tableModel.clearFilters()
-                    afterQueryChange(grid)
-                },
-            )
+            menu.add(menuItem(TableKitBundle.message("filter.clear.all")) { clearFilters() })
         }
         return menu
     }
@@ -395,12 +547,6 @@ class TabularEditorPanel(
     private fun ask(prompt: String): String? =
         Messages.showInputDialog(this, prompt, TableKitBundle.message("filter.title"), null)?.takeIf { it.isNotEmpty() }
 
-    private fun afterQueryChange(grid: JBTable) {
-        grid.tableHeader.repaint()
-        grid.scrollRectToVisible(Rectangle(0, 0, 1, 1))
-        updateStatus()
-    }
-
     /** Sizes columns from the first loaded page - a default width per column is useless. */
     private fun sizeColumnsToContent(grid: JBTable, tableModel: TabularTableModel) {
         val cellMetrics = grid.getFontMetrics(grid.font)
@@ -419,7 +565,33 @@ class TabularEditorPanel(
         }
     }
 
-    // --- status -------------------------------------------------------------
+    // --- what the query looks like ------------------------------------------
+
+    private fun refreshQueryUi() {
+        val tableModel = model ?: return
+        chips.show(tableModel.query.filters)
+        updateEmptyText(tableModel)
+        table?.let { grid ->
+            grid.tableHeader.repaint()
+            grid.scrollRectToVisible(Rectangle(0, 0, 1, 1))
+        }
+        updateStatus()
+    }
+
+    /** An empty grid must say why it is empty, and offer the way out. */
+    private fun updateEmptyText(tableModel: TabularTableModel) {
+        val emptyText = table?.emptyText ?: return
+        emptyText.clear()
+        if (tableModel.query.filters.isEmpty()) {
+            emptyText.text = TableKitBundle.message("grid.empty")
+        } else {
+            emptyText.text = TableKitBundle.message("grid.empty.filtered")
+            emptyText.appendSecondaryText(
+                TableKitBundle.message("grid.empty.clear"),
+                SimpleTextAttributes.LINK_ATTRIBUTES,
+            ) { clearFilters() }
+        }
+    }
 
     private fun updateStatus() {
         val opened = source ?: return
@@ -473,6 +645,9 @@ class TabularEditorPanel(
     private companion object {
         val ROW_FORMAT: NumberFormat = NumberFormat.getIntegerInstance()
 
+        const val IdeActions_FIND = "Find"
+        const val TOOLBAR_PLACE = "TableKitEditorToolbar"
+        const val FILTER_COLUMNS = 22
         const val FILTER_DELAY_MS = 300
         const val SAMPLE_ROWS = 50
         const val MAX_MEASURED_CHARS = 80

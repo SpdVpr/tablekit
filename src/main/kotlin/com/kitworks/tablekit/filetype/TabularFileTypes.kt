@@ -22,7 +22,7 @@ abstract class TabularFileType(private val format: TabularFormat) : FileType {
 
     override fun getDefaultExtension(): String = format.extensions.first()
 
-    override fun getIcon(): Icon = TableKitIcons.TableFile
+    override fun getIcon(): Icon = TableKitIcons.forFormat(format)
 
     override fun isBinary(): Boolean = true
 

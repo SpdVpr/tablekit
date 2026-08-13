@@ -26,6 +26,7 @@ class TabularTableModel(
     private val executor: ExecutorService,
     private val onError: (String) -> Unit,
     private val onRowCountChanged: (Long) -> Unit = {},
+    private val onQueryChanged: (Query) -> Unit = {},
 ) : AbstractTableModel() {
 
     val columns: List<ColumnInfo> = source.columns
@@ -118,8 +119,13 @@ class TabularTableModel(
 
         if (!filtersChanged) {
             fireTableDataChanged()
+            onQueryChanged(newQuery)
             return
         }
+
+        // The chips and the empty state describe the query, not its result, so
+        // they update now rather than when the count comes back.
+        onQueryChanged(newQuery)
 
         // The row count is part of the answer now, and only the engine knows it.
         val requested = generation

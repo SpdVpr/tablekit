@@ -102,9 +102,15 @@ class GridScreenshotTest : BasePlatformTestCase() {
     }
 
     private fun write(component: javax.swing.JComponent, name: String, width: Int = 1200, height: Int = 620) {
-        // A table installs its header into the enclosing scroll pane from
-        // addNotify(), which never runs without a window. Do it by hand so the
-        // picture shows what the IDE would show.
+        // Two things the IDE does on addNotify(), which never runs without a
+        // window: a table installs its header into the enclosing scroll pane,
+        // and a toolbar builds its buttons. Both by hand so the picture shows
+        // what the IDE would show.
+        UIUtil.uiTraverser(component).traverse()
+            .filter(com.intellij.openapi.actionSystem.impl.ActionToolbarImpl::class.java)
+            .forEach { it.updateActionsImmediately() }
+        PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
+
         UIUtil.uiTraverser(component).traverse()
             .filter(javax.swing.JScrollPane::class.java)
             .forEach { scrollPane ->

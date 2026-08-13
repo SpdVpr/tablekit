@@ -42,7 +42,13 @@ class BinaryTabularFileEditorProvider : TabularFileEditorProviderBase(binaryForm
  */
 class TextTabularFileEditorProvider : TabularFileEditorProviderBase(binaryFormats = false) {
 
-    override fun getEditorTypeId(): String = "tablekit.text"
+    override fun getEditorTypeId(): String = EDITOR_TYPE_ID
+
+    companion object {
+        /** Also used to select this tab from the Open in TableKit action. */
+        const val EDITOR_TYPE_ID = "tablekit.text"
+
+    }
 
     override fun getPolicy(): FileEditorPolicy = FileEditorPolicy.PLACE_AFTER_DEFAULT_EDITOR
 }

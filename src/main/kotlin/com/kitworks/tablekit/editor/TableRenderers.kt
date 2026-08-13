@@ -2,6 +2,7 @@ package com.kitworks.tablekit.editor
 
 import com.intellij.icons.AllIcons
 import com.intellij.ui.ColorUtil
+import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import com.kitworks.tablekit.data.ColumnInfo
 import java.awt.Component
@@ -35,6 +36,9 @@ class TabularCellRenderer(
 
         val modelColumn = table.convertColumnIndexToModel(column)
         horizontalAlignment = if (columns[modelColumn].numeric) SwingConstants.RIGHT else SwingConstants.LEFT
+        // Without breathing room a right aligned number touches the text of the
+        // column next to it and the two read as one value.
+        border = JBUI.Borders.empty(0, 6)
 
         val text = value as String?
         when {
@@ -50,8 +54,11 @@ class TabularCellRenderer(
             }
 
             else -> {
-                this.text = ""
+                // The page is still on its way; say so quietly rather than
+                // showing a row that looks empty.
+                this.text = "..."
                 toolTipText = null
+                if (!isSelected) foreground = ColorUtil.withAlpha(UIUtil.getInactiveTextColor(), 0.55)
             }
         }
         return this
@@ -96,6 +103,7 @@ class TabularHeaderRenderer(
             null -> null
         }
         component.horizontalTextPosition = SwingConstants.LEADING
+        component.border = JBUI.Borders.empty(2, 6)
         return component
     }
 

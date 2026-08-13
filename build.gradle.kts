@@ -42,6 +42,11 @@ dependencies {
     // Never shipped - bundling POI (or fastexcel) would put a second copy of
     // commons-compress and a StAX implementation next to the IDE's own.
     testImplementation("org.apache.poi:poi-ooxml:5.5.1")
+
+    // Test only, for the same reason: writes the .avro fixtures our own reader
+    // is checked against. Avro's own runtime would bring Jackson, slf4j and
+    // commons-compress along with it.
+    testImplementation("org.apache.avro:avro:1.12.1")
 }
 
 tasks.test {

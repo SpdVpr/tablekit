@@ -1,7 +1,7 @@
 # TableKit: Excel & Parquet Viewer
 
-Open Parquet, Excel, CSV, TSV and JSON Lines files directly in a JetBrains IDE - no row
-limits, no freezes, no data leaving the machine.
+Open Parquet, Excel, Avro, CSV, TSV and JSON Lines files directly in a JetBrains IDE - no
+row limits, no freezes, no data leaving the machine.
 
 ![The grid](docs/screenshots/01-parquet.png)
 
@@ -15,6 +15,7 @@ under **40 MB of heap** while it is sorted; a 786 MB CSV opens in under a second
 | **Every type** | Column types sit in the header; struct, list and map values are rendered as JSON instead of driver objects. |
 | **Statistics** | Nulls, distinct values, range, average and the shape of the distribution, for the rows the filters leave. |
 | **Excel** | `.xlsx` and `.xlsm`, sheet by sheet, with dates read as dates. |
+| **Avro** | Schema-typed columns, logical types, nested records as JSON, deflate. |
 | **Export** | The rows currently shown, filters and sorting included, to CSV, TSV, JSON Lines or Parquet - which also makes it a format converter. |
 | **Private** | No network permissions at all. Nothing uploaded, no telemetry, nothing downloaded at runtime. |
 
@@ -94,14 +95,17 @@ Sorting, filtering and statistics are pushed down to DuckDB as SQL; the grid nev
 more than a few thousand rows. One background thread per open file runs every query, and
 the EDT only paints what has already arrived.
 
-### Why the .xlsx reader is ours
+### Why the .xlsx and .avro readers are ours
 
-Every Excel library worth using depends on `commons-compress` and a StAX implementation,
-both of which the IntelliJ Platform already bundles in versions we do not control.
-Shipping a second copy is how plugins earn `NoSuchMethodError` reports on IDE versions
-their author never tested. `XlsxWorkbook` therefore parses the format with `java.util.zip`
-and the `javax.xml.stream` API only. Apache POI is used in tests to write the fixtures it
-is checked against, and is never shipped.
+Every Excel library worth using depends on `commons-compress` and a StAX implementation;
+Apache Avro depends on Jackson, slf4j and commons-compress. The IntelliJ Platform already
+bundles all of those, in versions we do not control, and shipping a second copy is how
+plugins earn `NoSuchMethodError` reports on IDE versions their author never tested.
+
+`XlsxWorkbook` therefore parses its format with `java.util.zip` and the `javax.xml.stream`
+API, and `AvroFile` with `java.util.zip` and a 150-line JSON reader. Apache POI and Apache
+Avro are used in tests to write the fixtures those readers are checked against, and are
+never shipped.
 
 ### Non-negotiable constraints
 
@@ -121,6 +125,7 @@ src/main/kotlin/com/kitworks/tablekit/
   filetype/   IDE file type registrations (drives plugin suggestions)
   data/       TableSource, queries, filters, DuckDB session
   data/xlsx/  the .xlsx reader
+  data/avro/  the .avro reader
   editor/     FileEditor, providers, grid model, renderers, root panel
   icons/      icon holder
 src/main/resources/

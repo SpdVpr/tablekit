@@ -22,7 +22,7 @@ class TabularEditorRegistrationTest : BasePlatformTestCase() {
     }
 
     fun `test binary formats are opened by TableKit alone`() {
-        for (name in listOf("data.parquet", "book.xlsx", "events.avro", "warehouse.orc")) {
+        for (name in listOf("data.parquet", "book.xlsx", "events.avro")) {
             val providers = providersFor(name)
             val ours = providers.filterIsInstance<BinaryTabularFileEditorProvider>()
             assertEquals("expected exactly one TableKit provider for $name", 1, ours.size)

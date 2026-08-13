@@ -51,10 +51,3 @@ class AvroFileType private constructor() : TabularFileType(TabularFormat.AVRO) {
         val INSTANCE = AvroFileType()
     }
 }
-
-class OrcFileType private constructor() : TabularFileType(TabularFormat.ORC) {
-    companion object {
-        @JvmField
-        val INSTANCE = OrcFileType()
-    }
-}

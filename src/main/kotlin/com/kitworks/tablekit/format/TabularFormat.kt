@@ -18,7 +18,6 @@ enum class TabularFormat(
     PARQUET("Parquet", binary = true, extensions = listOf("parquet", "parq", "pq")),
     EXCEL("Excel", binary = true, extensions = listOf("xlsx", "xlsm")),
     AVRO("Avro", binary = true, extensions = listOf("avro")),
-    ORC("ORC", binary = true, extensions = listOf("orc")),
     CSV("CSV", binary = false, extensions = listOf("csv")),
     TSV("TSV", binary = false, extensions = listOf("tsv", "tab")),
     JSONL("JSON Lines", binary = false, extensions = listOf("jsonl", "ndjson"));

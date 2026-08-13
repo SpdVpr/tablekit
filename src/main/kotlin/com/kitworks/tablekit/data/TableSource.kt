@@ -1,5 +1,6 @@
 package com.kitworks.tablekit.data
 
+import com.kitworks.tablekit.data.avro.AvroException
 import com.kitworks.tablekit.data.xlsx.XlsxException
 import com.kitworks.tablekit.format.TabularFormat
 import java.io.Closeable
@@ -213,6 +214,7 @@ class TableSource private constructor(
                 val sheets = if (format == TabularFormat.EXCEL) ExcelImporter.sheetNames(path) else emptyList()
                 val relation = when (format) {
                     TabularFormat.EXCEL -> ExcelImporter.load(connection, path, sheetIndex)
+                    TabularFormat.AVRO -> AvroImporter.load(connection, path)
                     else -> relationOf(path, format)
                 }
                 connection.createStatement().use { statement ->
@@ -225,6 +227,9 @@ class TableSource private constructor(
             } catch (e: XlsxException) {
                 connection.closeQuietly()
                 throw TableSourceException(e.message ?: "The workbook could not be read.", e)
+            } catch (e: AvroException) {
+                connection.closeQuietly()
+                throw TableSourceException(e.message ?: "The Avro file could not be read.", e)
             } catch (e: Throwable) {
                 connection.closeQuietly()
                 throw e
@@ -239,10 +244,9 @@ class TableSource private constructor(
                 TabularFormat.CSV -> "read_csv_auto($literal)"
                 TabularFormat.TSV -> "read_csv_auto($literal, delim='\\t')"
                 TabularFormat.JSONL -> "read_json_auto($literal, format='newline_delimited')"
-                TabularFormat.EXCEL -> throw TableSourceException("Workbooks are loaded, not read in place.")
+                TabularFormat.EXCEL,
                 TabularFormat.AVRO,
-                TabularFormat.ORC,
-                -> throw TableSourceException("${format.displayName} files are not supported yet.")
+                -> throw TableSourceException("${format.displayName} files are loaded, not read in place.")
             }
         }
 

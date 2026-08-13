@@ -154,8 +154,8 @@ class TableSourceTest {
     }
 
     @Test
-    fun `formats that are not implemented yet say so`() {
-        for (format in listOf(TabularFormat.AVRO, TabularFormat.ORC)) {
+    fun `formats that are loaded rather than read in place say so`() {
+        for (format in listOf(TabularFormat.EXCEL, TabularFormat.AVRO)) {
             try {
                 TableSource.relationOf(temp.newFile("x.$format").toPath(), format)
                 fail("expected $format to be rejected")

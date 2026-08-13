@@ -13,13 +13,11 @@ object TableKitIcons {
     private val PARQUET = load("parquetFile")
     private val EXCEL = load("excelFile")
     private val AVRO = load("avroFile")
-    private val ORC = load("orcFile")
 
     fun forFormat(format: TabularFormat): Icon = when (format) {
         TabularFormat.PARQUET -> PARQUET
         TabularFormat.EXCEL -> EXCEL
         TabularFormat.AVRO -> AVRO
-        TabularFormat.ORC -> ORC
         else -> PARQUET
     }
 

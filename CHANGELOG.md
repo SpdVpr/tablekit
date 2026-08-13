@@ -11,6 +11,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   multi-gigabyte file opens as fast as a small one.
 - **Excel (.xlsx, .xlsm) viewer** with a sheet switcher. The reader is written
   on the JDK alone - no third-party spreadsheet library is shipped.
+- **Avro viewer**: the file's own schema decides the column types, logical types
+  (date, time, timestamp, decimal) arrive as themselves, nested records, arrays
+  and maps as JSON, and deflate-compressed files are read. The reader is ours
+  for the same reason as the Excel one.
 - **Sorting** by clicking a column header, pushed down to the engine as
   `ORDER BY` rather than sorting in the IDE's heap.
 - **Filtering**: a filter box that searches every column at once, plus a
@@ -26,8 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   engine writes the file, so this doubles as format conversion.
 - **Row numbers** that count the current view, so with a filter in force row 1
   is the first row on screen.
-- File type registration for `.parquet`, `.parq`, `.pq`, `.xlsx`, `.xlsm`,
-  `.avro`, `.orc`, which is also what makes the IDE suggest the plugin.
+- File type registration for `.parquet`, `.parq`, `.pq`, `.xlsx`, `.xlsm` and
+  `.avro`, which is also what makes the IDE suggest the plugin. ORC is not
+  registered until it can be read - being suggested for a file the plugin then
+  refuses to open is worse than not being suggested.
 - `.csv`, `.tsv` and `.jsonl` open in TableKit as a second editor tab; whatever
   editor already owns them stays the default.
 - Readable error screens for unreadable files - never an exception balloon.

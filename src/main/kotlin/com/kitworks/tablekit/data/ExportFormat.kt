@@ -8,11 +8,13 @@ enum class ExportFormat(
     val displayName: String,
     val extension: String,
     internal val copyOptions: String,
+    /** Text formats have no nested types, so struct and list columns become JSON. */
+    internal val nestedAsJson: Boolean,
 ) {
-    CSV("CSV", "csv", "FORMAT CSV, HEADER"),
-    TSV("TSV", "tsv", "FORMAT CSV, HEADER, DELIMITER '\t'"),
-    JSONL("JSON Lines", "jsonl", "FORMAT JSON"),
-    PARQUET("Parquet", "parquet", "FORMAT PARQUET"),
+    CSV("CSV", "csv", "FORMAT CSV, HEADER", nestedAsJson = true),
+    TSV("TSV", "tsv", "FORMAT CSV, HEADER, DELIMITER '\t'", nestedAsJson = true),
+    JSONL("JSON Lines", "jsonl", "FORMAT JSON", nestedAsJson = false),
+    PARQUET("Parquet", "parquet", "FORMAT PARQUET", nestedAsJson = false),
     ;
 
     companion object {

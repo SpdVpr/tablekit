@@ -2,6 +2,7 @@ package com.kitworks.tablekit.data
 
 import com.kitworks.tablekit.format.TabularFormat
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -109,6 +110,43 @@ class StatisticsAndExportTest {
                     assertEquals("$format lost columns", listOf("city", "score"), copy.columns.map { it.name })
                     assertEquals("$format changed values", expected, copy.fetchPage(Query(), 0, 10).rows.map { it[0] })
                 }
+            }
+        }
+    }
+
+    /** A CSV cannot hold a struct, and the engine's own rendering is not JSON. */
+    @Test
+    fun `nested columns reach a text export as json`() {
+        open("SELECT 1 AS id, {'city': 'Prague', 'zip': 11000} AS address").use { source ->
+            val csv = temp.newFile("nested.csv").toPath()
+            source.export(Query(), csv, ExportFormat.CSV)
+
+            val lines = Files.readAllLines(csv).filter { it.isNotBlank() }
+            assertEquals("id,address", lines[0])
+            assertFalse(
+                "the engine's own struct rendering is not JSON: ${lines[1]}",
+                lines[1].contains("'city'"),
+            )
+
+            // And it survives the round trip as text a parser can read.
+            TableSource.open(csv, TabularFormat.CSV).use { reopened ->
+                val value = reopened.fetchPage(Query(), 0, 1).rows.single()[1]
+                assertEquals("""{"city":"Prague","zip":11000}""", value)
+            }
+        }
+    }
+
+    /** Parquet and JSON Lines carry nesting natively, so it stays nested there. */
+    @Test
+    fun `nested columns stay nested in the formats that support them`() {
+        open("SELECT 1 AS id, {'city': 'Prague', 'zip': 11000} AS address").use { source ->
+            val parquet = temp.newFile("nested.parquet").toPath()
+            Files.delete(parquet)
+            source.export(Query(), parquet, ExportFormat.PARQUET)
+
+            TableSource.open(parquet, TabularFormat.PARQUET).use { reopened ->
+                assertTrue("a struct must not become text", reopened.columns[1].nested)
+                assertTrue(reopened.columns[1].typeName.startsWith("STRUCT"))
             }
         }
     }

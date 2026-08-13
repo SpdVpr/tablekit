@@ -167,7 +167,19 @@ class TableSource private constructor(
      * the JVM heap, and converting between formats is the same operation.
      */
     fun export(query: Query, target: Path, format: ExportFormat) {
-        val rows = "SELECT * FROM $VIEW_NAME${query.whereClause()}${query.orderByClause()}"
+        // Parquet and JSON carry nested values natively, so they get the columns
+        // as they are. A CSV cannot, and the engine's own rendering of a struct
+        // - {'city': Prague} - is not JSON and not parseable by anything. Text
+        // formats therefore get the same JSON the grid shows.
+        val projection = if (format.nestedAsJson && columns.any { it.nested }) {
+            columns.joinToString(", ") { column ->
+                val quoted = Sql.identifier(column.name)
+                if (column.nested) "CAST(to_json($quoted) AS VARCHAR) AS $quoted" else quoted
+            }
+        } else {
+            "*"
+        }
+        val rows = "SELECT $projection FROM $VIEW_NAME${query.whereClause()}${query.orderByClause()}"
         val destination = Sql.literal(target.toAbsolutePath().toString())
         try {
             connection.createStatement().use { statement ->

@@ -103,6 +103,9 @@ class TabularEditorPanel(
 
     val preferredFocusedComponent: JComponent get() = table ?: this
 
+    @org.jetbrains.annotations.TestOnly
+    internal fun reloadForTest() = open()
+
     // --- opening ------------------------------------------------------------
 
     private fun open() {
@@ -172,6 +175,17 @@ class TabularEditorPanel(
     }
 
     private fun showFailure(failure: Throwable) {
+        // A failed reload must not leave the previous file open behind the error
+        // screen, or Export would quietly write the data that is no longer shown.
+        source?.let { previous -> executor.execute { previous.close() } }
+        source = null
+        model = null
+        table = null
+        rowNumbers = null
+        chips.show(emptyList())
+        toolbarRow.isVisible = false
+        actionToolbar?.updateActionsAsync()
+
         val message = (failure as? TableSourceException)?.message
             ?: failure.message
             ?: TableKitBundle.message("editor.error.unknown")

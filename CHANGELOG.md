@@ -27,7 +27,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   values with proportional bars. Computed over whatever the filters leave.
 - **Export** of the rows currently shown - filters and sorting included, every
   row rather than the page on screen - to CSV, TSV, JSON Lines or Parquet. The
-  engine writes the file, so this doubles as format conversion.
+  engine writes the file, so this doubles as format conversion. Nested values
+  become JSON in text formats and stay nested in Parquet and JSON Lines.
 - **Row numbers** that count the current view, so with a filter in force row 1
   is the first row on screen.
 - File type registration for `.parquet`, `.parq`, `.pq`, `.xlsx`, `.xlsm` and

@@ -202,6 +202,41 @@ class TabularEditorPanelTest : BasePlatformTestCase() {
         assertFalse(java.nio.file.Files.exists(path))
     }
 
+    /** A reload that fails must not leave the previous file open behind the error. */
+    fun `test a file that becomes unreadable releases the one it replaced`() {
+        val path = tempDirectory().resolve("swapped.parquet")
+        DuckDb.connect().use { connection ->
+            connection.createStatement().use { statement ->
+                statement.execute("COPY (SELECT 1 AS n) TO ${Sql.literal(path.toString())} (FORMAT PARQUET)")
+            }
+        }
+        val file = refresh(path)
+
+        val editor = BinaryTabularFileEditorProvider().createEditor(project, file)
+        try {
+            PlatformTestUtil.waitWithEventsDispatching(
+                "the grid never appeared",
+                { UIUtil.findComponentOfType(editor.component, JBTable::class.java) != null },
+                TIMEOUT_SECONDS,
+            )
+
+            // The file turns into rubbish under the editor, and the user reloads.
+            path.toFile().writeText("no longer a parquet file")
+            refresh(path).refresh(false, false)
+            val panel = checkNotNull(UIUtil.findComponentOfType(editor.component, TabularEditorPanel::class.java))
+            panel.reloadForTest()
+
+            PlatformTestUtil.waitWithEventsDispatching(
+                "the editor never reported the failure",
+                { editor.component.hasText("Could not open") },
+                TIMEOUT_SECONDS,
+            )
+            assertNull("the stale grid has to go with it", UIUtil.findComponentOfType(editor.component, JBTable::class.java))
+        } finally {
+            Disposer.dispose(editor)
+        }
+    }
+
     private fun numbersOf(table: JBTable): RowNumberTable {
         val scrollPane = checkNotNull(UIUtil.getParentOfType(javax.swing.JScrollPane::class.java, table)) { "grid is not in a scroll pane" }
         return checkNotNull(scrollPane.rowHeader?.view as? RowNumberTable) { "grid has no row numbers" }

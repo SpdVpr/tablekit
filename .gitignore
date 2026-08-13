@@ -8,6 +8,9 @@ build/
 *.iml
 out/
 
+# Sandbox for running a locally installed IDE against the plugin
+.idea-run/
+
 # Plugin sandbox / build artifacts
 .intellijPlatform/
 .kotlin/

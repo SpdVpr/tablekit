@@ -18,5 +18,6 @@ out/
 local.properties
 .env
 
-# Test fixtures generated on demand (large data files)
+# Test fixtures and demo files generated on demand
 testData/generated/
+demo/

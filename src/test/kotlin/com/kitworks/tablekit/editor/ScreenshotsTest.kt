@@ -56,6 +56,7 @@ class ScreenshotsTest : BasePlatformTestCase() {
             awaitPage(model)
 
             write(editor.component, "01-parquet.png")
+
             inDarkTheme(editor.component) { write(editor.component, "02-parquet-dark.png") }
 
             val base = image(editor.component)

@@ -50,11 +50,20 @@ dependencies {
     testImplementation("org.apache.avro:avro:1.12.1")
 }
 
+// The sandbox IDE opens the sample files, so runIde lands straight on a grid
+// instead of an empty welcome screen. Generate them with:
+//   ./gradlew test -Ptablekit.demo=true --tests '*DemoDataTest'
+tasks.named<org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask>("runIde") {
+    val demo = layout.projectDirectory.dir("demo").asFile
+    if (demo.isDirectory) args(demo.absolutePath)
+}
+
 tasks.test {
     // Performance tests generate a gigabyte of data, so they are opt in:
     //   ./gradlew test -Ptablekit.perf=true --tests '*PerformanceTest'
     providers.gradleProperty("tablekit.perf").orNull?.let { systemProperty("tablekit.perf", it) }
     providers.gradleProperty("tablekit.screenshots").orNull?.let { systemProperty("tablekit.screenshots", it) }
+    providers.gradleProperty("tablekit.demo").orNull?.let { systemProperty("tablekit.demo", it) }
     testLogging {
         showStandardStreams = true
     }

@@ -63,6 +63,14 @@ class GridScreenshotTest : BasePlatformTestCase() {
 
             write(editor.component, "grid.png")
 
+            // Every colour TableKit picks comes from the theme, so the dark
+            // rendering is a check that none of them was hard coded.
+            inDarkTheme {
+                javax.swing.SwingUtilities.updateComponentTreeUI(editor.component)
+                write(editor.component, "grid-dark.png")
+            }
+            javax.swing.SwingUtilities.updateComponentTreeUI(editor.component)
+
             // The statistics popup cannot be opened without a window, but the
             // panel it shows can be painted on its own.
             val source = com.kitworks.tablekit.data.TableSource.open(
@@ -77,6 +85,19 @@ class GridScreenshotTest : BasePlatformTestCase() {
             }
         } finally {
             Disposer.dispose(editor)
+        }
+    }
+
+    /** Repaints under Darcula if this platform build lets a test install it. */
+    private fun inDarkTheme(block: () -> Unit) {
+        val previous = javax.swing.UIManager.getLookAndFeel()
+        try {
+            javax.swing.UIManager.setLookAndFeel(com.intellij.ide.ui.laf.darcula.DarculaLaf())
+            block()
+        } catch (e: Throwable) {
+            println("[screenshot] dark theme unavailable: " + e.message)
+        } finally {
+            runCatching { javax.swing.UIManager.setLookAndFeel(previous) }
         }
     }
 

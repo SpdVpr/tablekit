@@ -7,8 +7,8 @@ Vendor: **Kitworks** · Plugin ID: `com.kitworks.tablekit` (immutable after firs
 
 ## Status
 
-Phase 1: the viewer works for Parquet, CSV, TSV, JSON Lines and Excel, with sorting and
-filtering. See [PLAN.md](PLAN.md) for the roadmap, [CHANGELOG.md](CHANGELOG.md) for what
+Phase 1 complete bar the listing assets: the viewer works for Parquet, CSV, TSV, JSON
+Lines and Excel, with sorting, filtering, column statistics and export. See [PLAN.md](PLAN.md) for the roadmap, [CHANGELOG.md](CHANGELOG.md) for what
 landed, and [CLAUDE.md](CLAUDE.md) for the product decisions behind it.
 
 ## Requirements

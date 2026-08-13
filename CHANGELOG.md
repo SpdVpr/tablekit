@@ -18,6 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   context menu. The status bar shows how many rows are left.
 - **Schema at a glance**: every column header shows its type, and nested values
   (struct, list, map) are rendered as JSON instead of driver objects.
+- **Column statistics** from the header's context menu: rows, nulls and their
+  share, distinct values, range, average for numbers, and the ten most frequent
+  values with proportional bars. Computed over whatever the filters leave.
+- **Export** of the rows currently shown - filters and sorting included, every
+  row rather than the page on screen - to CSV, TSV, JSON Lines or Parquet. The
+  engine writes the file, so this doubles as format conversion.
+- **Row numbers** that count the current view, so with a filter in force row 1
+  is the first row on screen.
 - File type registration for `.parquet`, `.parq`, `.pq`, `.xlsx`, `.xlsm`,
   `.avro`, `.orc`, which is also what makes the IDE suggest the plugin.
 - `.csv`, `.tsv` and `.jsonl` open in TableKit as a second editor tab; whatever

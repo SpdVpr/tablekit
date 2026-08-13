@@ -2,7 +2,6 @@ package com.kitworks.tablekit.editor
 
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorState
-import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
@@ -12,12 +11,11 @@ import java.beans.PropertyChangeListener
 import javax.swing.JComponent
 
 class TabularFileEditor(
-    project: Project,
     private val file: VirtualFile,
     format: TabularFormat,
 ) : UserDataHolderBase(), FileEditor {
 
-    private val panel = TabularEditorPanel(project, file, format)
+    private val panel = TabularEditorPanel(file, format)
 
     override fun getComponent(): JComponent = panel
 

@@ -24,7 +24,7 @@ sealed class TabularFileEditorProviderBase(private val binaryFormats: Boolean) :
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor {
         val format = requireNotNull(TabularFormat.of(file)) { "Unsupported file: ${file.name}" }
-        return TabularFileEditor(project, file, format)
+        return TabularFileEditor(file, format)
     }
 }
 

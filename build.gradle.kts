@@ -32,6 +32,10 @@ dependencies {
         zipSigner()
     }
 
+    // Embedded query engine: reads parquet/csv/tsv/jsonl in place, does the
+    // sorting, filtering and statistics we would otherwise do on the heap.
+    implementation("org.duckdb:duckdb_jdbc:1.5.5.1")
+
     testImplementation("junit:junit:4.13.2")
 }
 

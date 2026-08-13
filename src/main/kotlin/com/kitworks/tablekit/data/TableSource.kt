@@ -70,6 +70,78 @@ class TableSource private constructor(
         return count
     }
 
+    /**
+     * What a column contains, under the filters currently in force.
+     *
+     * Two full scans, run only when the user asks for them: one aggregate pass
+     * and one grouping pass for the most frequent values.
+     */
+    fun statistics(query: Query, column: ColumnInfo): ColumnStatistics {
+        val expression = valueExpression(column)
+        val average = if (column.numeric) ", CAST(avg($expression) AS VARCHAR)" else ""
+
+        var statistics: ColumnStatistics? = null
+        query(
+            "SELECT count(*), count($expression), count(DISTINCT $expression)," +
+                " CAST(min($expression) AS VARCHAR), CAST(max($expression) AS VARCHAR)$average" +
+                " FROM $VIEW_NAME${query.whereClause()}",
+        ) { resultSet ->
+            if (resultSet.next()) {
+                statistics = ColumnStatistics(
+                    column = column.name,
+                    total = resultSet.getLong(1),
+                    nonNull = resultSet.getLong(2),
+                    distinct = resultSet.getLong(3),
+                    min = resultSet.getString(4),
+                    max = resultSet.getString(5),
+                    average = if (column.numeric) resultSet.getString(6) else null,
+                    topValues = emptyList(),
+                )
+            }
+        }
+
+        val summary = statistics ?: throw TableSourceException("The column could not be summarised.")
+        return summary.copy(topValues = topValues(query, expression))
+    }
+
+    private fun topValues(query: Query, expression: String): List<ValueCount> {
+        val values = mutableListOf<ValueCount>()
+        query(
+            "SELECT CAST($expression AS VARCHAR), count(*) AS occurrences FROM $VIEW_NAME${query.whereClause()}" +
+                " GROUP BY 1 ORDER BY occurrences DESC, 1 LIMIT $TOP_VALUES",
+        ) { resultSet ->
+            while (resultSet.next()) {
+                values += ValueCount(resultSet.getString(1), resultSet.getLong(2))
+            }
+        }
+        return values
+    }
+
+    /**
+     * Writes the rows the user is currently looking at - filters and sort
+     * included, but every row, not just the page on screen - to a file.
+     *
+     * The engine does the writing, so exporting a gigabyte does not go through
+     * the JVM heap, and converting between formats is the same operation.
+     */
+    fun export(query: Query, target: Path, format: ExportFormat) {
+        val rows = "SELECT * FROM $VIEW_NAME${query.whereClause()}${query.orderByClause()}"
+        val destination = Sql.literal(target.toAbsolutePath().toString())
+        try {
+            connection.createStatement().use { statement ->
+                statement.execute("COPY ($rows) TO $destination (${format.copyOptions})")
+            }
+        } catch (e: SQLException) {
+            throw TableSourceException(readableMessage(e), e)
+        }
+    }
+
+    /** Nested columns are compared and grouped as their JSON form. */
+    private fun valueExpression(column: ColumnInfo): String {
+        val quoted = Sql.identifier(column.name)
+        return if (column.nested) "CAST(to_json($quoted) AS VARCHAR)" else quoted
+    }
+
     private fun query(sql: String, read: (java.sql.ResultSet) -> Unit) {
         try {
             connection.createStatement().use { statement ->
@@ -86,6 +158,7 @@ class TableSource private constructor(
 
     companion object {
         private const val VIEW_NAME = "tablekit_source"
+        private const val TOP_VALUES = 10
 
         fun open(path: Path, format: TabularFormat, sheetIndex: Int = 0): TableSource {
             val connection = try {

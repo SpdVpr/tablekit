@@ -62,12 +62,25 @@ class GridScreenshotTest : BasePlatformTestCase() {
             PlatformTestUtil.dispatchAllEventsInIdeEventQueue()
 
             write(editor.component, "grid.png")
+
+            // The statistics popup cannot be opened without a window, but the
+            // panel it shows can be painted on its own.
+            val source = com.kitworks.tablekit.data.TableSource.open(
+                java.nio.file.Paths.get(file.path),
+                com.kitworks.tablekit.format.TabularFormat.PARQUET,
+            )
+            source.use {
+                val column = it.columns[1]
+                val panel = ColumnStatisticsPanel(column, it.statistics(com.kitworks.tablekit.data.Query(), column))
+                panel.size = panel.preferredSize
+                write(panel, "statistics.png", panel.preferredSize.width, panel.preferredSize.height)
+            }
         } finally {
             Disposer.dispose(editor)
         }
     }
 
-    private fun write(component: javax.swing.JComponent, name: String) {
+    private fun write(component: javax.swing.JComponent, name: String, width: Int = 1200, height: Int = 620) {
         // A table installs its header into the enclosing scroll pane from
         // addNotify(), which never runs without a window. Do it by hand so the
         // picture shows what the IDE would show.
@@ -77,7 +90,7 @@ class GridScreenshotTest : BasePlatformTestCase() {
                 (scrollPane.viewport?.view as? JBTable)?.let { scrollPane.setColumnHeaderView(it.tableHeader) }
             }
 
-        component.setSize(1200, 620)
+        component.setSize(width, height)
         component.doLayout()
         UIUtil.uiTraverser(component).traverse().forEach { it.doLayout() }
 

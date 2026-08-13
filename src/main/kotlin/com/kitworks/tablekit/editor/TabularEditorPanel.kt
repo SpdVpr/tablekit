@@ -3,13 +3,17 @@ package com.kitworks.tablekit.editor
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.fileChooser.FileChooserFactory
+import com.intellij.openapi.fileChooser.FileSaverDescriptor
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.JBPopupMenu
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.util.text.StringUtil
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.JBColor
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.components.JBPanelWithEmptyText
@@ -23,16 +27,20 @@ import com.intellij.util.ui.UIUtil
 import com.kitworks.tablekit.TableKitBundle
 import com.kitworks.tablekit.data.ColumnFilter
 import com.kitworks.tablekit.data.ColumnInfo
+import com.kitworks.tablekit.data.ExportFormat
 import com.kitworks.tablekit.data.TableSource
 import com.kitworks.tablekit.data.TableSourceException
 import com.kitworks.tablekit.format.TabularFormat
 import java.awt.BorderLayout
 import java.awt.Cursor
 import java.awt.FlowLayout
+import java.awt.Point
 import java.awt.Rectangle
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.nio.file.Path
 import java.text.NumberFormat
+import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JMenuItem
 import javax.swing.JTable
@@ -43,10 +51,10 @@ import javax.swing.event.DocumentEvent
  * Root component of the tabular editor: a loading state, then either the grid
  * or a readable error.
  *
- * Opening a file, counting its rows and fetching pages all happen on a single
- * background thread per file. The EDT only ever paints what has already been
- * fetched - an IDE that freezes on a large file is the exact failure we exist
- * to fix.
+ * Opening a file, counting its rows, fetching pages, summarising a column and
+ * exporting all happen on a single background thread per file. The EDT only
+ * ever paints what has already been fetched - an IDE that freezes on a large
+ * file is the exact failure we exist to fix.
  */
 class TabularEditorPanel(
     private val file: VirtualFile,
@@ -65,6 +73,7 @@ class TabularEditorPanel(
     private var source: TableSource? = null
     private var model: TabularTableModel? = null
     private var table: JBTable? = null
+    private var rowNumbers: RowNumberTable? = null
     private var sheetIndex = 0
     private var columnsSized = false
 
@@ -120,7 +129,10 @@ class TabularEditorPanel(
             ) { column -> tableModel.query.sortKeyFor(column)?.descending }
             tableHeader.addMouseListener(headerMouse(this, tableModel))
         }
+
+        val numbers = RowNumberTable(grid).apply { updateWidth() }
         tableModel.addTableModelListener {
+            numbers.updateWidth()
             if (!columnsSized && tableModel.rowCount > 0 && tableModel.isLoaded(0)) {
                 columnsSized = true
                 sizeColumnsToContent(grid, tableModel)
@@ -129,9 +141,10 @@ class TabularEditorPanel(
 
         model = tableModel
         table = grid
+        rowNumbers = numbers
         buildToolbar(opened, tableModel)
         updateStatus()
-        setCenter(JBScrollPane(grid))
+        setCenter(JBScrollPane(grid).apply { setRowHeaderView(numbers) })
     }
 
     private fun showFailure(failure: Throwable) {
@@ -182,6 +195,7 @@ class TabularEditorPanel(
             text = ""
         }
         toolbar.add(filterField)
+        toolbar.add(JButton(TableKitBundle.message("editor.export")).apply { addActionListener { exportRows() } })
         toolbar.isVisible = true
         toolbar.revalidate()
         toolbar.repaint()
@@ -192,6 +206,72 @@ class TabularEditorPanel(
     private fun scheduleFilter(tableModel: TabularTableModel) {
         filterAlarm.cancelAllRequests()
         filterAlarm.addRequest({ tableModel.filterByText(filterField.text) }, FILTER_DELAY_MS)
+    }
+
+    // --- exporting ----------------------------------------------------------
+
+    /**
+     * Writes what the user is looking at - filters and sort included, every row
+     * rather than the page on screen. The engine writes the file, so this is
+     * also how a Parquet file becomes a CSV.
+     */
+    private fun exportRows() {
+        val opened = source ?: return
+        val tableModel = model ?: return
+
+        val descriptor = FileSaverDescriptor(
+            TableKitBundle.message("editor.export.title"),
+            TableKitBundle.message("editor.export.description"),
+            *ExportFormat.values().map { it.extension }.toTypedArray(),
+        )
+        val suggested = file.nameWithoutExtension + "." + ExportFormat.CSV.extension
+        val chosen = FileChooserFactory.getInstance()
+            .createSaveFileDialog(descriptor, this)
+            .save(file.toNioPath().parent, suggested)
+            ?: return
+
+        val target = withKnownExtension(chosen.file.toPath())
+        val exportFormat = ExportFormat.forExtension(target.fileName.toString().substringAfterLast('.', ""))
+            ?: ExportFormat.CSV
+        val query = tableModel.query
+        val rows = tableModel.filteredRowCount
+
+        statusLabel.foreground = UIUtil.getContextHelpForeground()
+        statusLabel.text = TableKitBundle.message("editor.export.running", target.fileName.toString())
+
+        executor.execute {
+            val result = runCatching { opened.export(query, target, exportFormat) }
+            onEdt {
+                if (disposed) return@onEdt
+                result
+                    .onSuccess {
+                        statusLabel.foreground = UIUtil.getContextHelpForeground()
+                        statusLabel.text = TableKitBundle.message(
+                            "editor.export.done",
+                            ROW_FORMAT.format(rows),
+                            target.fileName.toString(),
+                        )
+                    }
+                    .onFailure { failure ->
+                        showPageError(
+                            (failure as? TableSourceException)?.message
+                                ?: failure.message
+                                ?: TableKitBundle.message("editor.export.failed"),
+                        )
+                    }
+            }
+        }
+    }
+
+    /** A name typed without an extension still has to end up a real CSV file. */
+    private fun withKnownExtension(target: Path): Path {
+        val name = target.fileName.toString()
+        val extension = name.substringAfterLast('.', "")
+        return if (ExportFormat.forExtension(extension) != null) {
+            target
+        } else {
+            target.resolveSibling(name + "." + ExportFormat.CSV.extension)
+        }
     }
 
     // --- grid behaviour -----------------------------------------------------
@@ -214,19 +294,33 @@ class TabularEditorPanel(
         private fun maybeShowMenu(event: MouseEvent) {
             if (!event.isPopupTrigger) return
             val column = columnAt(grid, event) ?: return
-            columnMenu(grid, tableModel, column).show(grid.tableHeader, event.x, event.y)
+            val where = RelativePoint(grid.tableHeader, Point(event.x, event.y))
+            columnMenu(grid, tableModel, column, where).show(grid.tableHeader, event.x, event.y)
         }
     }
 
     private fun columnAt(grid: JBTable, event: MouseEvent): Int? =
         grid.columnAtPoint(event.point).takeIf { it >= 0 }?.let(grid::convertColumnIndexToModel)
 
-    private fun columnMenu(grid: JBTable, tableModel: TabularTableModel, column: Int): JBPopupMenu {
+    private fun columnMenu(grid: JBTable, tableModel: TabularTableModel, column: Int, where: RelativePoint): JBPopupMenu {
         val info: ColumnInfo = tableModel.columns[column]
         val menu = JBPopupMenu(info.name)
 
-        menu.add(menuItem(TableKitBundle.message("filter.sort.asc")) { tableModel.sortBy(column, descending = false); afterQueryChange(grid) })
-        menu.add(menuItem(TableKitBundle.message("filter.sort.desc")) { tableModel.sortBy(column, descending = true); afterQueryChange(grid) })
+        menu.add(menuItem(TableKitBundle.message("stats.action")) { showStatistics(tableModel, info, where) })
+        menu.addSeparator()
+
+        menu.add(
+            menuItem(TableKitBundle.message("filter.sort.asc")) {
+                tableModel.sortBy(column, descending = false)
+                afterQueryChange(grid)
+            },
+        )
+        menu.add(
+            menuItem(TableKitBundle.message("filter.sort.desc")) {
+                tableModel.sortBy(column, descending = true)
+                afterQueryChange(grid)
+            },
+        )
         if (tableModel.query.sortKeyFor(info.name) != null) {
             menu.add(menuItem(TableKitBundle.message("filter.sort.clear")) { tableModel.clearSort(); afterQueryChange(grid) })
         }
@@ -266,6 +360,36 @@ class TabularEditorPanel(
         return menu
     }
 
+    /** Two full scans of one column, so it runs off the EDT like everything else. */
+    private fun showStatistics(tableModel: TabularTableModel, column: ColumnInfo, where: RelativePoint) {
+        val opened = source ?: return
+        val query = tableModel.query
+
+        statusLabel.foreground = UIUtil.getContextHelpForeground()
+        statusLabel.text = TableKitBundle.message("stats.computing", column.name)
+
+        executor.execute {
+            val result = runCatching { opened.statistics(query, column) }
+            onEdt {
+                if (disposed) return@onEdt
+                result
+                    .onSuccess { statistics ->
+                        updateStatus()
+                        JBPopupFactory.getInstance()
+                            .createComponentPopupBuilder(ColumnStatisticsPanel(column, statistics), null)
+                            .setResizable(true)
+                            .setMovable(true)
+                            .setRequestFocus(true)
+                            .createPopup()
+                            .show(where)
+                    }
+                    .onFailure { failure ->
+                        showPageError((failure as? TableSourceException)?.message ?: TableKitBundle.message("stats.failed"))
+                    }
+            }
+        }
+    }
+
     private fun menuItem(text: String, action: () -> Unit) = JMenuItem(text).apply { addActionListener { action() } }
 
     private fun ask(prompt: String): String? =
@@ -299,6 +423,7 @@ class TabularEditorPanel(
 
     private fun updateStatus() {
         val opened = source ?: return
+        rowNumbers?.updateWidth()
         val shown = model?.filteredRowCount ?: opened.rowCount
         val rows = if (shown == opened.rowCount) {
             TableKitBundle.message("editor.rows", ROW_FORMAT.format(shown))

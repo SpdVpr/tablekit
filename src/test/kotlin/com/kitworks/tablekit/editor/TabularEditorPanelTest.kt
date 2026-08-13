@@ -93,6 +93,29 @@ class TabularEditorPanelTest : BasePlatformTestCase() {
         }
     }
 
+    fun `test the row numbers follow what the filter leaves`() {
+        val file = parquet("cities.parquet", "SELECT * FROM (VALUES ('Prague'), ('Brno'), ('Ostrava'), ('Plzen'), ('Liberec')) t(city)")
+
+        withEditorFor(file) { table ->
+            val model = table.model as TabularTableModel
+            awaitPage(model)
+
+            val numbers = numbersOf(table)
+            assertEquals(5, numbers.model.rowCount)
+            assertEquals(1, numbers.model.getValueAt(0, 0))
+            assertEquals(5, numbers.model.getValueAt(4, 0))
+
+            model.filterByText("Pr")
+            PlatformTestUtil.waitWithEventsDispatching("the filter never applied", { model.rowCount == 1 }, TIMEOUT_SECONDS)
+            assertEquals("row numbers must count the filtered view", 1, numbers.model.rowCount)
+        }
+    }
+
+    private fun numbersOf(table: JBTable): RowNumberTable {
+        val scrollPane = checkNotNull(UIUtil.getParentOfType(javax.swing.JScrollPane::class.java, table)) { "grid is not in a scroll pane" }
+        return checkNotNull(scrollPane.rowHeader?.view as? RowNumberTable) { "grid has no row numbers" }
+    }
+
     // --- helpers ------------------------------------------------------------
 
     private fun withEditorFor(file: VirtualFile, assertions: (JBTable) -> Unit) {

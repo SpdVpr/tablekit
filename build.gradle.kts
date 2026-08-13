@@ -96,7 +96,7 @@ intellijPlatform {
         }
     }
 
-    // Credentials come from the environment only - see MARKETPLACE-SETUP.md.
+    // Credentials come from the environment only - never from the repository.
     signing {
         certificateChainFile = providers.environmentVariable("CERTIFICATE_CHAIN_FILE").map { file(it) }
         privateKeyFile = providers.environmentVariable("PRIVATE_KEY_FILE").map { file(it) }

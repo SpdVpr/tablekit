@@ -9,7 +9,7 @@ import javax.swing.Icon
 /**
  * File types for the binary tabular formats. Registering them is our main free
  * distribution channel: an IDE that meets an unknown .parquet file offers the
- * plugin that declares the type (see PLAN.md).
+ * plugin that declares the type (see CLAUDE.md).
  *
  * Text formats (CSV/TSV/JSONL) are intentionally NOT registered here - they
  * already have owners in the IDE and we only attach a secondary editor tab.

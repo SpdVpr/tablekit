@@ -39,10 +39,11 @@ Vendor: **Kitworks** · Plugin ID: `com.kitworks.tablekit` (immutable after firs
 
 ## Status
 
-Phase 2. The viewer works for Parquet, CSV, TSV, JSON Lines and Excel, with sorting,
+Phase 3. The viewer works for Parquet, Avro, Excel, CSV, TSV and JSON Lines, with sorting,
 filtering, column statistics, export and the interaction pass that makes it feel like part
-of the IDE. See [PLAN.md](PLAN.md) for the roadmap, [CHANGELOG.md](CHANGELOG.md) for what
-landed, and [CLAUDE.md](CLAUDE.md) for the product decisions behind it.
+of the IDE. The IntelliJ Plugin Verifier reports it compatible with the whole range it
+declares. See [CHANGELOG.md](CHANGELOG.md) for what landed and [CLAUDE.md](CLAUDE.md) for
+the decisions behind it.
 
 ## Requirements
 
@@ -140,6 +141,12 @@ src/main/resources/
 
 ## Release
 
-See [MARKETPLACE-SETUP.md](MARKETPLACE-SETUP.md). Signing and publishing credentials are read
-from the environment only (`CERTIFICATE_CHAIN_FILE`, `PRIVATE_KEY_FILE`,
-`PRIVATE_KEY_PASSWORD`, `PUBLISH_TOKEN`) and must never be committed.
+Signing and publishing credentials are read from the environment only
+(`CERTIFICATE_CHAIN_FILE`, `PRIVATE_KEY_FILE`, `PRIVATE_KEY_PASSWORD`, `PUBLISH_TOKEN`)
+and must never be committed.
+
+## License
+
+Proprietary, source available: read it, build it, use it - see [LICENSE](LICENSE).
+The source is public so that the "no network permissions" claim above is something
+you can check rather than something you have to believe.

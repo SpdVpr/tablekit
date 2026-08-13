@@ -5,7 +5,7 @@ import com.intellij.openapi.vfs.VirtualFile
 /**
  * Tabular file formats TableKit can open.
  *
- * [binary] separates the two distribution strategies described in PLAN.md:
+ * [binary] separates the two distribution strategies described in CLAUDE.md:
  * binary formats have no usable built-in editor, so TableKit becomes their
  * default editor; text formats (CSV/TSV/JSONL) keep their existing editor and
  * TableKit only adds a secondary tab - we do not fight the CSV Editor plugin.

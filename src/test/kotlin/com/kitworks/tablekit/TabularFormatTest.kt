@@ -36,7 +36,7 @@ class TabularFormatTest {
         assertEquals(all.size, all.toSet().size)
     }
 
-    /** Only text formats keep their existing default editor - see PLAN.md. */
+    /** Only text formats keep their existing default editor - see CLAUDE.md. */
     @Test
     fun `text formats are the ones the IDE already owns`() {
         val text = TabularFormat.values().filterNot { it.binary }.toSet()

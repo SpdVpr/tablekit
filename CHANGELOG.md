@@ -60,7 +60,7 @@ IntelliJ Plugin Verifier reports the plugin **compatible** with IntelliJ IDEA 20
 enabled and disabled without restarting the IDE.
 
 ### Performance
-Targets from PLAN.md in brackets.
+Performance targets in brackets.
 
 A 1.24 GB Parquet file, 25 million rows:
 

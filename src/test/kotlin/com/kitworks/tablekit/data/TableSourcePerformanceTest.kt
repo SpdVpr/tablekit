@@ -12,7 +12,7 @@ import java.nio.file.Paths
 import kotlin.system.measureTimeMillis
 
 /**
- * The performance targets from PLAN.md are requirements, not wishes, so they
+ * The performance targets from CLAUDE.md are requirements, not wishes, so they
  * are asserted rather than eyeballed.
  *
  * Skipped by default because it generates a gigabyte of test data. Run it with:

@@ -1,10 +1,11 @@
 <idea-plugin>
-    <!-- IMMUTABLE after the first Marketplace upload. See MARKETPLACE-SETUP.md. -->
+    <!-- IMMUTABLE after the first Marketplace upload. -->
     <id>com.kitworks.tablekit</id>
     <name>TableKit: Excel &amp; Parquet Viewer</name>
 
-    <!-- TODO: switch the email to support@kitworks.* once the domain is registered,
-         and make sure the url points to a PUBLIC repo before the first upload. -->
+    <!-- The url is the public repository, which doubles as the support channel the
+         listing needs. TODO: switch the email to support@kitworks.* once the domain
+         is registered. -->
     <vendor email="michalvesecky@gmail.com" url="https://github.com/SpdVpr/tablekit">Kitworks</vendor>
 
     <description><![CDATA[

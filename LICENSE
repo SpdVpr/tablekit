@@ -1,0 +1,22 @@
+Copyright (c) 2026 Kitworks. All rights reserved.
+
+TableKit is proprietary software. Its source code is published so that anyone can
+read it and check what the plugin does - in particular, that it performs no network
+communication at all: it collects no telemetry, uploads no data, and downloads
+nothing at runtime.
+
+You may:
+  - install and use the plugin in JetBrains IDEs, for personal or commercial purposes
+  - read the source code, and build it from source for your own use
+
+You may not:
+  - redistribute the plugin or its source code, in original or modified form
+  - create derivative works from it, or use its source code in another product
+  - remove or circumvent licensing checks, should the plugin later contain any
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

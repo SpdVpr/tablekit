@@ -110,3 +110,10 @@ intellijPlatform {
         token = providers.environmentVariable("PUBLISH_TOKEN")
     }
 }
+
+// verifyPluginSignature reads what signPlugin writes but does not say so, so on a
+// clean release run (clean, build, sign, verify) Gradle refuses the undeclared
+// dependency. It only appears to work when a signed archive is left over.
+tasks.named("verifyPluginSignature") {
+    dependsOn("signPlugin")
+}

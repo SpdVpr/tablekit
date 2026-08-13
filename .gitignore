@@ -1,0 +1,22 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+out/
+
+# Plugin sandbox / build artifacts
+.intellijPlatform/
+.kotlin/
+
+# Local secrets - NEVER commit (signing keys, marketplace token)
+*.pem
+*.p12
+local.properties
+.env
+
+# Test fixtures generated on demand (large data files)
+testData/generated/

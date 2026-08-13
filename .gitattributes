@@ -1,0 +1,11 @@
+# Keep line endings deterministic across Windows and CI.
+* text=auto eol=lf
+
+*.bat        text eol=crlf
+gradlew      text eol=lf
+*.jar        binary
+*.zip        binary
+*.parquet    binary
+*.xlsx       binary
+*.avro       binary
+*.orc        binary

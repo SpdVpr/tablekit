@@ -18,6 +18,8 @@ out/
 # Local secrets - NEVER commit (signing keys, marketplace token)
 *.pem
 *.p12
+*.crt
+*.key
 local.properties
 .env
 

@@ -1,6 +1,7 @@
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
+import java.io.File
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -98,8 +99,10 @@ intellijPlatform {
 
     // Credentials come from the environment only - never from the repository.
     signing {
-        certificateChainFile = providers.environmentVariable("CERTIFICATE_CHAIN_FILE").map { file(it) }
-        privateKeyFile = providers.environmentVariable("PRIVATE_KEY_FILE").map { file(it) }
+        // fileProvider, not file(): file() resolves against the project, and capturing
+        // the project here is what the configuration cache refuses to serialize.
+        certificateChainFile.fileProvider(providers.environmentVariable("CERTIFICATE_CHAIN_FILE").map { File(it) })
+        privateKeyFile.fileProvider(providers.environmentVariable("PRIVATE_KEY_FILE").map { File(it) })
         password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
     }
 

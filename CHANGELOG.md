@@ -48,13 +48,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   leading values of categorical ones.
 
 ### Performance
-Measured on a 1.24 GB Parquet file with 25 million rows (targets from PLAN.md
-in brackets):
+Targets from PLAN.md in brackets.
+
+A 1.24 GB Parquet file, 25 million rows:
 
 | | |
 |---|---|
-| Open (schema + row count) | 14 ms (< 2 s) |
-| First page | 18 ms |
-| Page at the end of the file | 45 ms |
-| First page of a full sort | 931 ms |
-| Heap after sorting | 32 MB (< 300 MB) |
+| Open (schema + row count) | 17 ms (< 2 s) |
+| First page, mid file, end of file | 14 / 23 / 27 ms |
+| First page of a full sort | 940 ms |
+| Heap after sorting | 37 MB (< 300 MB) |
+
+A 786 MB CSV file, 12 million rows. The engine re-reads a CSV for every query,
+so a page deep in the file costs a scan rather than a seek:
+
+| | |
+|---|---|
+| Open (sniff + row count) | 814 ms |
+| First page | 35 ms |
+| Page at the end of the file | 1.7 s |
+| Counting a filtered result | 1.2 s |
+
+A 200 000 row Excel workbook, which is loaded rather than read in place:
+
+| | |
+|---|---|
+| Open (two passes + load) | 1.5 s |
+| Any page afterwards | 3 ms |
+| Sorted page | 13 ms |

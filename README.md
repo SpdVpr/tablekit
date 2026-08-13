@@ -6,8 +6,8 @@ limits, no freezes, no data leaving the machine.
 ![The grid](docs/screenshots/01-parquet.png)
 
 An embedded DuckDB engine queries the file where it lies, so only the rows on screen are
-ever in memory. A 1.2 GB Parquet file with 25 million rows opens in **14 ms** and stays
-under **32 MB of heap** while it is sorted.
+ever in memory. A 1.2 GB Parquet file with 25 million rows opens in **17 ms** and stays
+under **40 MB of heap** while it is sorted; a 786 MB CSV opens in under a second.
 
 | | |
 |---|---|

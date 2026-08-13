@@ -32,6 +32,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   editor already owns them stays the default.
 - Readable error screens for unreadable files - never an exception balloon.
 
+### Interaction
+- Search field, action toolbar (statistics, export, reload) and a context menu on the grid
+  carrying the same actions.
+- Active filters shown as removable chips; an empty grid explains itself and offers to
+  clear them; a file that failed to open offers to try again.
+- **Show Value** (double click or Ctrl+Enter) opens a cell in full and re-indents nested
+  JSON.
+- Striped rows, per-format file icons, row numbers that count the current view.
+- Ctrl+F focuses the filter, Escape clears it, F5 rereads the file.
+- **Open in TableKit** on the project view and editor tab menus for CSV, TSV and JSON
+  Lines, where TableKit is the second tab rather than the default editor.
+- Excel dates formatted without a time are read as dates, not as midnight timestamps.
+- Column statistics show the distribution of ordered columns as a histogram and the
+  leading values of categorical ones.
+
 ### Performance
 Measured on a 1.24 GB Parquet file with 25 million rows (targets from PLAN.md
 in brackets):

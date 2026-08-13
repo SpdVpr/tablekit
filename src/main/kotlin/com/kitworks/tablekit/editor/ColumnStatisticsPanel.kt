@@ -9,6 +9,7 @@ import com.intellij.util.ui.UIUtil
 import com.kitworks.tablekit.TableKitBundle
 import com.kitworks.tablekit.data.ColumnInfo
 import com.kitworks.tablekit.data.ColumnStatistics
+import com.kitworks.tablekit.data.Histogram
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Dimension
@@ -35,8 +36,15 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
         border = JBUI.Borders.empty(8, 10)
         add(header(column), BorderLayout.NORTH)
         add(figures(statistics), BorderLayout.CENTER)
-        if (statistics.topValues.isNotEmpty()) {
-            add(topValues(statistics), BorderLayout.SOUTH)
+
+        // Ordered columns get their shape; categorical ones get their leaders.
+        // A list of values that each occur once says nothing the distinct count
+        // has not already said, so it is left out.
+        val histogram = statistics.histogram
+        val repeats = statistics.topValues.any { it.value != null && it.count > 1 }
+        when {
+            histogram != null && histogram.isUseful -> add(distribution(statistics, histogram), BorderLayout.SOUTH)
+            repeats -> add(topValues(statistics), BorderLayout.SOUTH)
         }
     }
 
@@ -84,9 +92,38 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
         add(TableKitBundle.message("stats.distinct"), COUNT.format(statistics.distinct))
         add(TableKitBundle.message("stats.min"), statistics.min)
         add(TableKitBundle.message("stats.max"), statistics.max)
-        add(TableKitBundle.message("stats.average"), statistics.average)
+        add(TableKitBundle.message("stats.average"), statistics.average?.let(::readableNumber))
         return panel
     }
+
+    /** An average is a summary; seventeen significant digits is not one. */
+    private fun readableNumber(text: String): String =
+        text.toDoubleOrNull()?.let(AVERAGE::format) ?: text
+
+    private fun distribution(statistics: ColumnStatistics, histogram: Histogram): JComponent {
+        val panel = JPanel(BorderLayout())
+        panel.isOpaque = false
+        panel.border = JBUI.Borders.emptyTop(10)
+
+        panel.add(
+            JBLabel(TableKitBundle.message("stats.distribution")).apply { font = JBFont.label().asBold() },
+            BorderLayout.NORTH,
+        )
+        panel.add(HistogramView(histogram), BorderLayout.CENTER)
+
+        val bounds = JPanel(BorderLayout())
+        bounds.isOpaque = false
+        bounds.add(edgeLabel(statistics.min, SwingConstants.LEFT), BorderLayout.WEST)
+        bounds.add(edgeLabel(statistics.max, SwingConstants.RIGHT), BorderLayout.EAST)
+        panel.add(bounds, BorderLayout.SOUTH)
+        return panel
+    }
+
+    private fun edgeLabel(text: String?, alignment: Int) =
+        JBLabel(text.orEmpty().take(MAX_BOUND_LENGTH), alignment).apply {
+            foreground = UIUtil.getContextHelpForeground()
+            font = JBFont.small()
+        }
 
     private fun topValues(statistics: ColumnStatistics): JComponent {
         val panel = JPanel()
@@ -134,6 +171,37 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
 
     private fun hex(color: Color): String = ColorUtil.toHex(color)
 
+    /** The shape of an ordered column: one bar per slice of its range. */
+    private class HistogramView(private val histogram: Histogram) : JPanel() {
+
+        init {
+            isOpaque = false
+            preferredSize = Dimension(JBUI.scale(300), JBUI.scale(56))
+        }
+
+        override fun paintComponent(g: Graphics) {
+            val bins = histogram.counts
+            if (bins.isEmpty()) return
+
+            val gap = JBUI.scale(1)
+            val barWidth = ((width - gap * (bins.size - 1)).toDouble() / bins.size).coerceAtLeast(1.0)
+            val highest = histogram.highest.coerceAtLeast(1)
+            val baseline = height - JBUI.scale(1)
+
+            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.45)
+            bins.forEachIndexed { index, count ->
+                val barHeight = (count.toDouble() / highest * (baseline - JBUI.scale(2))).toInt()
+                val x = (index * (barWidth + gap)).toInt()
+                // Something that occurred at all should be visible.
+                val drawn = if (count > 0) barHeight.coerceAtLeast(JBUI.scale(1)) else 0
+                g.fillRect(x, baseline - drawn, barWidth.toInt().coerceAtLeast(1), drawn)
+            }
+
+            g.color = ColorUtil.withAlpha(UIUtil.getLabelForeground(), 0.20)
+            g.fillRect(0, baseline, width, JBUI.scale(1))
+        }
+    }
+
     /** A proportional bar; the width is the share of the most frequent value. */
     private class FrequencyBar(private val fraction: Double) : JPanel() {
 
@@ -154,7 +222,9 @@ class ColumnStatisticsPanel(column: ColumnInfo, statistics: ColumnStatistics) :
 
     private companion object {
         val COUNT: NumberFormat = NumberFormat.getIntegerInstance()
+        val AVERAGE: NumberFormat = NumberFormat.getNumberInstance().apply { maximumFractionDigits = 4 }
         val PERCENT: NumberFormat = NumberFormat.getPercentInstance().apply { maximumFractionDigits = 1 }
         const val MAX_VALUE_LENGTH = 60
+        const val MAX_BOUND_LENGTH = 24
     }
 }

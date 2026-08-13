@@ -13,7 +13,7 @@ import javax.xml.stream.XMLStreamConstants
 import javax.xml.stream.XMLStreamReader
 
 /** What a cell holds, which is what decides the column's type later. */
-enum class CellKind { TEXT, INTEGER, DECIMAL, BOOLEAN, TIMESTAMP }
+enum class CellKind { TEXT, INTEGER, DECIMAL, BOOLEAN, DATE, TIME, TIMESTAMP }
 
 /**
  * A cell as text plus the kind it was stored as. Everything reaches the engine
@@ -41,7 +41,7 @@ class XlsxWorkbook private constructor(
     private val zip: ZipFile,
     val sheets: List<XlsxSheet>,
     private val sharedStrings: List<String>,
-    private val dateStyles: Set<Int>,
+    private val temporalStyles: Map<Int, CellKind>,
     private val date1904: Boolean,
 ) : Closeable {
 
@@ -120,9 +120,20 @@ class XlsxWorkbook private constructor(
 
     private fun number(raw: String, styleIndex: Int): CellValue {
         val decimal = raw.toBigDecimalOrNull() ?: return CellValue(raw, CellKind.TEXT)
-        if (styleIndex in dateStyles) {
-            return CellValue(toDateTime(decimal).toString(), CellKind.TIMESTAMP)
+
+        // A date in Excel is a number wearing a format. Which part of it the
+        // format shows decides whether this is a date, a time or both - a cell
+        // formatted as a date should not grow a 00:00:00 on the way in.
+        temporalStyles[styleIndex]?.let { kind ->
+            val moment = toDateTime(decimal)
+            val text = when (kind) {
+                CellKind.DATE -> moment.toLocalDate().toString()
+                CellKind.TIME -> moment.toLocalTime().toString()
+                else -> moment.toString()
+            }
+            return CellValue(text, kind)
         }
+
         val plain = decimal.stripTrailingZeros()
         return CellValue(plain.toPlainString(), if (plain.scale() <= 0) CellKind.INTEGER else CellKind.DECIMAL)
     }
@@ -184,8 +195,12 @@ class XlsxWorkbook private constructor(
             setProperty(XMLInputFactory.IS_COALESCING, false)
         }
 
-        /** Number formats Excel reserves for dates and times. */
-        private val BUILTIN_DATE_FORMATS = (14..22).toSet() + (45..47).toSet()
+        /** Number formats Excel reserves for dates and times, and what they show. */
+        private val BUILTIN_TEMPORAL_FORMATS: Map<Int, CellKind> =
+            (14..17).associateWith { CellKind.DATE } +
+                (18..21).associateWith { CellKind.TIME } +
+                mapOf(22 to CellKind.TIMESTAMP) +
+                (45..47).associateWith { CellKind.TIME }
 
         fun open(path: Path): XlsxWorkbook {
             val zip = try {
@@ -208,7 +223,7 @@ class XlsxWorkbook private constructor(
             val relations = readRelations(zip)
             val (sheets, date1904) = readWorkbook(zip, relations)
             if (sheets.isEmpty()) throw XlsxException("The workbook contains no sheets.")
-            return XlsxWorkbook(zip, sheets, readSharedStrings(zip), readDateStyles(zip), date1904)
+            return XlsxWorkbook(zip, sheets, readSharedStrings(zip), readTemporalStyles(zip), date1904)
         }
 
         private fun readRelations(zip: ZipFile): Map<String, String> {
@@ -289,8 +304,8 @@ class XlsxWorkbook private constructor(
          * Dates are numbers wearing a format, so the only way to tell 45000 from
          * a date is to look up the style the cell points at.
          */
-        private fun readDateStyles(zip: ZipFile): Set<Int> {
-            val customDateFormats = mutableSetOf<Int>()
+        private fun readTemporalStyles(zip: ZipFile): Map<Int, CellKind> {
+            val customFormats = mutableMapOf<Int, CellKind>()
             val styleFormats = mutableListOf<Int>()
             var inCellXfs = false
 
@@ -299,7 +314,8 @@ class XlsxWorkbook private constructor(
                     "numFmt" -> {
                         val id = reader.getAttributeValue(null, "numFmtId")?.toIntOrNull()
                         val code = reader.getAttributeValue(null, "formatCode")
-                        if (id != null && code != null && looksLikeDate(code)) customDateFormats += id
+                        val kind = code?.let(::temporalKindOf)
+                        if (id != null && kind != null) customFormats[id] = kind
                     }
 
                     "cellXfs" -> inCellXfs = true
@@ -308,26 +324,47 @@ class XlsxWorkbook private constructor(
             }
 
             return styleFormats.withIndex()
-                .filter { (_, format) -> format in BUILTIN_DATE_FORMATS || format in customDateFormats }
-                .map { (index, _) -> index }
-                .toSet()
+                .mapNotNull { (index, format) ->
+                    val kind = BUILTIN_TEMPORAL_FORMATS[format] ?: customFormats[format]
+                    kind?.let { index to it }
+                }
+                .toMap()
         }
 
-        /** A format code is a date format if it uses date fields outside quoted text. */
-        private fun looksLikeDate(formatCode: String): Boolean {
+        /**
+         * Reads a format code well enough to tell a date from a time.
+         *
+         * Excel writes both months and minutes as `m`; it means minutes when it
+         * sits next to hours or seconds. Text in quotes and locale hints in
+         * brackets are not format fields at all.
+         */
+        private fun temporalKindOf(formatCode: String): CellKind? {
             var quoted = false
             var bracketed = false
+            var hasDate = false
+            var hasTime = false
+            var previous = ' '
+
             for (character in formatCode) {
+                val lower = character.lowercaseChar()
                 when {
                     character == '"' -> quoted = !quoted
                     character == '[' -> bracketed = true
                     character == ']' -> bracketed = false
                     quoted || bracketed -> Unit
-                    character in "yYdD" -> return true
-                    character in "mMhHsS" -> return true
+                    lower == 'y' || lower == 'd' -> hasDate = true
+                    lower == 'h' || lower == 's' -> hasTime = true
+                    lower == 'm' -> if (previous == 'h' || previous == ':') hasTime = true else hasDate = true
                 }
+                if (!quoted && !bracketed && !character.isWhitespace()) previous = character.lowercaseChar()
             }
-            return false
+
+            return when {
+                hasDate && hasTime -> CellKind.TIMESTAMP
+                hasDate -> CellKind.DATE
+                hasTime -> CellKind.TIME
+                else -> null
+            }
         }
 
         private fun forEachElement(zip: ZipFile, entryName: String, required: Boolean, onElement: (XMLStreamReader) -> Unit) {

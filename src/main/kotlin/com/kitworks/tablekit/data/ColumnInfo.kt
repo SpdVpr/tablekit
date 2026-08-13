@@ -21,6 +21,10 @@ data class ColumnInfo(
     val numeric: Boolean
         get() = !nested && NUMERIC_TYPES.any { typeName.startsWith(it, ignoreCase = true) }
 
+    /** Dates and times are ordered too, so they get a distribution like numbers. */
+    val temporal: Boolean
+        get() = !nested && TEMPORAL_TYPES.any { typeName.startsWith(it, ignoreCase = true) }
+
     private companion object {
         val NESTED_PREFIXES = listOf("STRUCT", "MAP", "UNION", "LIST")
 
@@ -29,5 +33,7 @@ data class ColumnInfo(
             "UTINYINT", "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT",
             "FLOAT", "DOUBLE", "REAL", "DECIMAL",
         )
+
+        val TEMPORAL_TYPES = listOf("DATE", "TIMESTAMP", "TIME")
     }
 }

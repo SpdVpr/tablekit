@@ -11,6 +11,7 @@ import com.intellij.util.ui.UIUtil
 import com.kitworks.tablekit.TableKitBundle
 import com.kitworks.tablekit.data.ColumnInfo
 import java.awt.Dimension
+import javax.swing.JComponent
 
 /**
  * Shows one cell in full.
@@ -22,6 +23,18 @@ import java.awt.Dimension
 object CellValueViewer {
 
     fun popup(column: ColumnInfo, value: String?): JBPopup {
+        val content = component(column, value)
+        return JBPopupFactory.getInstance()
+            .createComponentPopupBuilder(content, content)
+            .setTitle(column.name + "  " + column.typeName)
+            .setResizable(true)
+            .setMovable(true)
+            .setRequestFocus(true)
+            .createPopup()
+    }
+
+    /** The popup's content, separately so it can be rendered on its own. */
+    fun component(column: ColumnInfo, value: String?): JComponent {
         val text = when {
             value == null -> TableKitBundle.message("value.null")
             JsonFormat.looksLikeJson(value) -> JsonFormat.pretty(value)
@@ -38,17 +51,9 @@ object CellValueViewer {
             caretPosition = 0
         }
 
-        val scroll = JBScrollPane(area).apply {
+        return JBScrollPane(area).apply {
             preferredSize = Dimension(JBUI.scale(WIDTH), JBUI.scale(HEIGHT))
         }
-
-        return JBPopupFactory.getInstance()
-            .createComponentPopupBuilder(scroll, area)
-            .setTitle("${column.name}  ${column.typeName}")
-            .setResizable(true)
-            .setMovable(true)
-            .setRequestFocus(true)
-            .createPopup()
     }
 
     private const val WIDTH = 540

@@ -107,8 +107,9 @@ class ExcelImporterTest {
         }
 
         TableSource.open(file, TabularFormat.EXCEL).use { source ->
+            assertEquals("a date-only format must not grow a time", "DATE", source.columns[0].typeName)
             val rows = source.fetchPage(Query(), 0, 10).rows.map { it[0] }
-            assertEquals(listOf("1900-01-01 00:00:00", "1900-02-28 00:00:00", "1900-03-01 00:00:00"), rows)
+            assertEquals(listOf("1900-01-01", "1900-02-28", "1900-03-01"), rows)
         }
     }
 

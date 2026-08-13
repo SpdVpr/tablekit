@@ -67,6 +67,7 @@ object ExcelImporter {
                         known == null -> cell.kind
                         known == cell.kind -> known
                         known.isNumeric && cell.kind.isNumeric -> CellKind.DECIMAL
+                        known.isTemporal && cell.kind.isTemporal -> CellKind.TIMESTAMP
                         else -> {
                             mixed += column
                             CellKind.TEXT
@@ -163,6 +164,8 @@ object ExcelImporter {
                 CellKind.INTEGER -> "TRY_CAST($source AS BIGINT)"
                 CellKind.DECIMAL -> "TRY_CAST($source AS DOUBLE)"
                 CellKind.BOOLEAN -> "TRY_CAST($source AS BOOLEAN)"
+                CellKind.DATE -> "TRY_CAST($source AS DATE)"
+                CellKind.TIME -> "TRY_CAST($source AS TIME)"
                 CellKind.TIMESTAMP -> "TRY_CAST($source AS TIMESTAMP)"
                 else -> source
             }
@@ -177,4 +180,7 @@ object ExcelImporter {
 
     private val CellKind.isNumeric: Boolean
         get() = this == CellKind.INTEGER || this == CellKind.DECIMAL
+
+    private val CellKind.isTemporal: Boolean
+        get() = this == CellKind.DATE || this == CellKind.TIME || this == CellKind.TIMESTAMP
 }

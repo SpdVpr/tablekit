@@ -127,6 +127,37 @@ class StatisticsAndExportTest {
         }
     }
 
+    @Test
+    fun `ordered columns get a distribution, others do not`() {
+        open("SELECT i AS n, 'x' || (i % 3) AS label FROM range(0, 300) t(i)").use { source ->
+            val numbers = source.statistics(Query(), source.columns[0])
+            val histogram = checkNotNull(numbers.histogram) { "a numeric column must have a distribution" }
+            assertTrue(histogram.isUseful)
+            assertEquals("every row lands in some bucket", 300L, histogram.counts.sum())
+            assertTrue("an even spread fills every bucket", histogram.counts.all { it > 0 })
+
+            assertNull("text has no range to spread over", source.statistics(Query(), source.columns[1]).histogram)
+        }
+    }
+
+    @Test
+    fun `timestamps spread out like numbers do`() {
+        open("SELECT TIMESTAMP '2026-01-01 00:00:00' + INTERVAL (i) DAY AS at FROM range(0, 120) t(i)").use { source ->
+            val histogram = checkNotNull(source.statistics(Query(), source.columns[0]).histogram)
+            assertEquals(120L, histogram.counts.sum())
+        }
+    }
+
+    @Test
+    fun `a column of one repeated value still summarises`() {
+        open("SELECT 7 AS n FROM range(0, 10) t(i)").use { source ->
+            val statistics = source.statistics(Query(), source.columns[0])
+            assertEquals(1L, statistics.distinct)
+            assertEquals("7", statistics.min)
+            assertEquals(10L, statistics.histogram?.counts?.sum())
+        }
+    }
+
     private fun open(select: String): TableSource {
         val file = temp.newFile("data-${counter++}.parquet").toPath()
         Files.delete(file)

@@ -101,7 +101,48 @@ class TableSource private constructor(
         }
 
         val summary = statistics ?: throw TableSourceException("The column could not be summarised.")
-        return summary.copy(topValues = topValues(query, expression))
+        return summary.copy(
+            topValues = topValues(query, expression),
+            histogram = if (column.numeric || column.temporal) histogram(query, column) else null,
+        )
+    }
+
+    /**
+     * Buckets an ordered column into [HISTOGRAM_BINS] equal slices of its range.
+     *
+     * Times are counted as seconds since the epoch, which makes a column of
+     * timestamps spread out the same way a column of prices does.
+     */
+    private fun histogram(query: Query, column: ColumnInfo): Histogram? {
+        val quoted = Sql.identifier(column.name)
+        val asNumber = if (column.temporal) "epoch($quoted)" else "CAST($quoted AS DOUBLE)"
+        val counts = LongArray(HISTOGRAM_BINS)
+        var any = false
+
+        try {
+            query(
+                "WITH v AS (SELECT $asNumber AS x FROM $VIEW_NAME${query.whereClause()})," +
+                    " b AS (SELECT min(x) AS lo, max(x) AS hi FROM v WHERE x IS NOT NULL)" +
+                    " SELECT CASE WHEN b.hi = b.lo THEN 0 ELSE least(" +
+                    "CAST(floor((v.x - b.lo) * $HISTOGRAM_BINS.0 / (b.hi - b.lo)) AS INTEGER), ${HISTOGRAM_BINS - 1}" +
+                    ") END AS bin, count(*) AS n" +
+                    " FROM v, b WHERE v.x IS NOT NULL GROUP BY 1 ORDER BY 1",
+            ) { resultSet ->
+                while (resultSet.next()) {
+                    val bin = resultSet.getInt(1)
+                    if (bin in counts.indices) {
+                        counts[bin] = resultSet.getLong(2)
+                        any = true
+                    }
+                }
+            }
+        } catch (ignored: TableSourceException) {
+            // A type that will not become a number has no distribution; the rest
+            // of the summary is still worth showing.
+            return null
+        }
+
+        return if (any) Histogram(counts.toList()) else null
     }
 
     private fun topValues(query: Query, expression: String): List<ValueCount> {
@@ -159,6 +200,7 @@ class TableSource private constructor(
     companion object {
         private const val VIEW_NAME = "tablekit_source"
         private const val TOP_VALUES = 10
+        private const val HISTOGRAM_BINS = 24
 
         fun open(path: Path, format: TabularFormat, sheetIndex: Int = 0): TableSource {
             val connection = try {

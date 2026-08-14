@@ -3,6 +3,10 @@
 Open Parquet, Excel, Avro, CSV, TSV and JSON Lines files directly in a JetBrains IDE - no
 row limits, no freezes, no data leaving the machine.
 
+**[Install from the JetBrains Marketplace](https://plugins.jetbrains.com/plugin/33521-tablekit-excel--parquet-viewer)**,
+or find it in your IDE under Settings → Plugins and search for *TableKit*. It runs in every
+JetBrains IDE from 2024.2 on, Android Studio and DataGrip included.
+
 ![The grid](docs/screenshots/ide-01-parquet.png)
 
 An embedded DuckDB engine queries the file where it lies, so only the rows on screen are
@@ -39,11 +43,13 @@ Vendor: **Kitworks** · Plugin ID: `com.kitworks.tablekit` (immutable after firs
 
 ## Status
 
-Phase 3. The viewer works for Parquet, Avro, Excel, CSV, TSV and JSON Lines, with sorting,
-filtering, column statistics, export and the interaction pass that makes it feel like part
-of the IDE. The IntelliJ Plugin Verifier reports it compatible with the whole range it
-declares. See [CHANGELOG.md](CHANGELOG.md) for what landed and [CLAUDE.md](CLAUDE.md) for
-the decisions behind it.
+**Released.** Version 0.1.0 was published on the JetBrains Marketplace on 14 August 2026.
+
+The viewer works for Parquet, Avro, Excel, CSV, TSV and JSON Lines, with sorting, filtering,
+column statistics, export and the interaction pass that makes it feel like part of the IDE.
+JetBrains' own verification found it compatible from IntelliJ IDEA 2024.2.6 through 2026.2.1,
+with no issues in an IDE run. See [CHANGELOG.md](CHANGELOG.md) for what landed and
+[CLAUDE.md](CLAUDE.md) for the decisions behind it.
 
 ## Requirements
 
